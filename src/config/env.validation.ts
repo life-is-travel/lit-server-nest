@@ -14,4 +14,6 @@ export const envValidationSchema = Joi.object({
   JWT_REFRESH_TOKEN_SECRET: Joi.string().min(32).required(),
 
   CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
+  SWAGGER_ENABLED: Joi.boolean().default(true),
+  SWAGGER_PATH: Joi.string().default('docs'),
 });
