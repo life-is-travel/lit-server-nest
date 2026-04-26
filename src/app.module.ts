@@ -5,6 +5,7 @@ import { envValidationSchema } from './config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
+import { ReservationsModule } from './modules/reservations/reservations.module';
 import { StoragesModule } from './modules/storages/storages.module';
 import { StoresModule } from './modules/stores/stores.module';
 
@@ -24,6 +25,7 @@ import { StoresModule } from './modules/stores/stores.module';
     HealthModule,
     StoresModule,
     StoragesModule,
+    ReservationsModule,
     DashboardModule,
   ],
 })

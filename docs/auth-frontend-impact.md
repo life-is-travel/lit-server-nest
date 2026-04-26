@@ -173,3 +173,35 @@ GET /api/dashboard/storages
 - 기존 Express의 `active`, `approved` 예약 상태는 현재 DB enum에 없으므로 `confirmed`, `in_progress`를 활성 예약으로 집계합니다.
 - 날짜 범위는 KST 기준으로 계산합니다.
 - 매출은 기존 호환을 위해 `reservations.payment_status = paid`와 `reservations.total_amount` 기준으로 집계합니다.
+
+## Reservations 모듈 1차 이전 영향
+
+매장 관리자용 예약 API가 기존 Express 서버와 같은 경로로 추가되었습니다.
+모든 엔드포인트는 매장 인증 토큰이 필요합니다.
+
+```txt
+POST /api/reservations
+GET  /api/reservations
+GET  /api/reservations/:id
+PUT  /api/reservations/:id/approve
+PUT  /api/reservations/:id/reject
+PUT  /api/reservations/:id/cancel
+PUT  /api/reservations/:id/status
+PUT  /api/reservations/:id/checkin
+```
+
+프론트 요청/응답 구조는 기존 Express 서버와 최대한 호환되게 유지했습니다.
+
+호환 유지 사항:
+
+- 예약 목록 응답은 `items`, `page`, `limit`, `total` 구조를 유지합니다.
+- 예약 응답 필드는 `storeId`, `customerId`, `customerName`, `phoneNumber`, `storageType`, `paymentStatus`처럼 camelCase로 반환됩니다.
+- `PUT /api/reservations/:id/status`는 기존 Express 호환을 위해 `approved`를 `confirmed`, `active`를 `in_progress`로 변환합니다.
+
+운영 보정 사항:
+
+- 예약 승인, 취소, 거절, 체크인은 트랜잭션으로 처리합니다.
+- 예약 승인 시 사용 가능한 보관함을 배정하고, 해당 보관함을 `occupied`로 변경합니다.
+- 예약 취소/거절/완료 상태로 변경되면 연결된 보관함을 `available`로 반납합니다.
+- 완료/취소/거절된 예약은 다른 상태로 다시 변경할 수 없습니다.
+- 날짜 필터는 KST 기준 일자 범위로 처리합니다.
