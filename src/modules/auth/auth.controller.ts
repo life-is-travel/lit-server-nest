@@ -1,10 +1,19 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { AuthThrottlerGuard } from './guards/auth-throttler.guard';
 import {
   AuthTokenResponseDto,
   RefreshAccessTokenResponseDto,
@@ -17,12 +26,14 @@ import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import { AuthService } from './auth.service';
 
 @ApiTags('Store Auth')
+@UseGuards(AuthThrottlerGuard)
 @Controller('api/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('email/send-verification')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 1, ttl: 60_000 } })
   @ApiOperation({ summary: '매장 이메일 인증 코드를 발송합니다.' })
   @ApiOkResponse()
   sendEmailVerification(@Body() dto: SendEmailVerificationDto) {

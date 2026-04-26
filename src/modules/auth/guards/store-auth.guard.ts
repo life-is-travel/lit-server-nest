@@ -8,8 +8,10 @@ import { Request } from 'express';
 import { TokenService } from '../services/token.service';
 import { StoreAccessTokenPayload } from '../types/store-token-payload.type';
 
+export type AuthenticatedStore = StoreAccessTokenPayload;
+
 export type AuthenticatedStoreRequest = Request & {
-  store?: StoreAccessTokenPayload;
+  store?: AuthenticatedStore;
   storeId?: string;
 };
 

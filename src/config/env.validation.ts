@@ -19,6 +19,12 @@ export const envValidationSchema = Joi.object({
   SWAGGER_ENABLED: Joi.boolean().default(true),
   SWAGGER_PATH: Joi.string().default('docs'),
 
+  AUTH_RATE_LIMIT_TTL: Joi.number()
+    .integer()
+    .min(1000)
+    .default(15 * 60 * 1000),
+  AUTH_RATE_LIMIT_LIMIT: Joi.number().integer().min(1).default(5),
+
   EMAIL_HOST: Joi.string().default('smtp.gmail.com'),
   EMAIL_PORT: Joi.number().port().default(587),
   EMAIL_SECURE: Joi.boolean().default(false),
