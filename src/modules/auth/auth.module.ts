@@ -44,6 +44,6 @@ import { TokenService } from './services/token.service';
     TokenService,
     StoreAuthGuard,
   ],
-  exports: [StoreAuthGuard, TokenService],
+  exports: [StoreAuthGuard, AuthThrottlerGuard, TokenService, PasswordService],
 })
 export class AuthModule {}
