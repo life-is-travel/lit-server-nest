@@ -233,3 +233,38 @@ PUT  /api/customer/reservations/:id/checkout
 - 체크아웃은 `confirmed`, `in_progress` 상태에서만 허용합니다.
 - 체크아웃은 트랜잭션으로 처리하며 예약을 `completed`로 변경하고 연결된 보관함을 `available`로 반납합니다.
 - 고객 토큰은 기존 Express와 동일하게 `{ customerId, role: 'customer', type: 'access' }` 형태를 검증합니다.
+
+## Guest Reservations 모듈 이전 영향
+
+비회원 예약 API가 기존 Express 서버와 같은 경로로 추가되었습니다.
+비회원 API는 인증이 없으므로 rate limit이 적용됩니다.
+
+```txt
+POST /api/guest/reservations
+POST /api/guest/reservations/cleanup
+GET  /api/guest/reservations/availability
+GET  /api/guest/reservations
+GET  /api/guest/reservations/:id
+PUT  /api/guest/reservations/:id/cancel
+```
+
+호환 유지 사항:
+
+- 예약 생성 요청은 기존 Express 호환을 위해 `storageType`과 `requestedStorageType`을 모두 허용합니다.
+- 이메일 필드는 `email`과 `customerEmail`을 모두 허용합니다.
+- 결제 필드는 `paymentKey`/`orderId`와 `payment_key`/`order_id`를 모두 허용합니다.
+- 전화번호 기반 목록 조회는 `phoneNumber`와 `customer_phone` query를 모두 허용합니다.
+- 예약 상세 조회는 기존처럼 `token` query가 필요합니다.
+- 예약 생성 응답은 `reservation`, `storeName` 구조를 유지합니다.
+
+운영 보정 사항:
+
+- 비회원 API에는 IP 기반 rate limit이 적용됩니다.
+- 전화번호는 하이픈/공백 제거 후 저장 및 비교합니다.
+- 예약 생성 시 매장 slug 또는 id를 받아 canonical store id로 정규화합니다.
+- 예약 생성 시 capacity를 사전 검증하고, 트랜잭션 내부에서 다시 검증합니다.
+- 결제 정보가 전달되면 성공 결제인지 확인하고, 이미 다른 예약에 연결된 결제는 거부합니다.
+- 예약 생성과 결제 `reservation_id` 연결은 트랜잭션으로 처리합니다.
+- 비회원 예약 취소는 전화번호 검증 후 가능하며, 이미 시작된 예약은 취소할 수 없습니다.
+- 비회원 예약 취소 시 연결된 보관함이 있으면 `available`로 반납합니다.
+- 미결제 guest pending 예약은 cleanup API에서 30분 TTL 기준으로 `cancelled` 처리합니다.
