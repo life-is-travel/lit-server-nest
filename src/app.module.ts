@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './common/database/prisma.module';
 import { envValidationSchema } from './config/env.validation';
 import { HealthModule } from './modules/health/health.module';
 
@@ -14,6 +15,7 @@ import { HealthModule } from './modules/health/health.module';
         allowUnknown: true,
       },
     }),
+    PrismaModule,
     HealthModule,
   ],
 })

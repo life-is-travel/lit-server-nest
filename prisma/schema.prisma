@@ -1,0 +1,860 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model coupon_policies {
+  id              String                        @id @db.VarChar(255)
+  store_id        String?                       @db.VarChar(255)
+  name            String                        @db.VarChar(255)
+  type            coupon_policies_type
+  discount_amount Int?
+  discount_rate   Int?                          @db.TinyInt
+  min_spend       Int?
+  max_discount    Int?
+  benefit_item    String?                       @db.VarChar(255)
+  benefit_value   String?                       @db.VarChar(255)
+  auto_issue_on   coupon_policies_auto_issue_on @default(manual_claim)
+  validity_days   Int                           @default(7)
+  enabled         Int                           @default(1) @db.TinyInt
+  created_at      DateTime                      @default(now()) @db.DateTime(0)
+  updated_at      DateTime                      @default(now()) @db.DateTime(0)
+
+  @@index([store_id, enabled], map: "idx_policy_store")
+  @@index([auto_issue_on, enabled], map: "idx_policy_trigger")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model coupons {
+  id              String         @id @db.VarChar(255)
+  customer_id     String         @db.VarChar(255)
+  store_id        String?        @db.VarChar(255)
+  type            coupons_type
+  title           String         @db.VarChar(255)
+  description     String?        @db.Text
+  discount_amount Int?
+  discount_rate   Int?           @db.TinyInt
+  min_spend       Int?
+  max_discount    Int?
+  benefit_item    String?        @db.VarChar(255)
+  benefit_value   String?        @db.VarChar(255)
+  status          coupons_status @default(active)
+  issued_at       DateTime       @default(now()) @db.DateTime(0)
+  expires_at      DateTime       @db.DateTime(0)
+  used_at         DateTime?      @db.DateTime(0)
+  reservation_id  String?        @db.VarChar(255)
+  phone_snapshot  String?        @db.VarChar(20)
+  payment_id      BigInt?
+  created_at      DateTime       @default(now()) @db.DateTime(0)
+  updated_at      DateTime       @default(now()) @db.DateTime(0)
+
+  @@index([customer_id, status], map: "idx_coupons_customer_status")
+  @@index([expires_at], map: "idx_coupons_expires")
+  @@index([payment_id], map: "idx_coupons_payment")
+  @@index([phone_snapshot], map: "idx_coupons_phone_snapshot")
+  @@index([reservation_id], map: "idx_coupons_reservation")
+  @@index([store_id, type], map: "idx_coupons_store_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model customer_auth_providers {
+  id            Int                                   @id @default(autoincrement())
+  customer_id   String                                @db.VarChar(255)
+  provider_type customer_auth_providers_provider_type
+  provider_id   String                                @db.VarChar(255)
+  email         String?                               @db.VarChar(255)
+  raw_profile   Json?
+  created_at    DateTime?                             @default(now()) @db.Timestamp(0)
+  updated_at    DateTime?                             @default(now()) @db.Timestamp(0)
+  customers     customers                             @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "customer_auth_providers_ibfk_1")
+
+  @@unique([provider_type, provider_id], map: "uniq_provider")
+  @@index([customer_id], map: "idx_customer")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model customer_devices {
+  id            String                       @id @db.VarChar(255)
+  customer_id   String                       @db.VarChar(255)
+  push_token    String                       @db.VarChar(500)
+  device_type   customer_devices_device_type
+  device_name   String?                      @db.VarChar(255)
+  is_active     Int                          @default(1) @db.TinyInt
+  last_login_at DateTime?                    @default(now()) @db.DateTime(0)
+  created_at    DateTime?                    @default(now()) @db.DateTime(0)
+  updated_at    DateTime?                    @default(now()) @db.DateTime(0)
+  customers     customers                    @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "customer_devices_ibfk_1")
+
+  @@index([customer_id], map: "idx_customer")
+  @@index([push_token(length: 255)], map: "idx_push_token")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model customer_payment_methods {
+  id               String                        @id @db.VarChar(255)
+  customer_id      String                        @db.VarChar(255)
+  type             customer_payment_methods_type
+  name             String                        @db.VarChar(100)
+  last_four_digits String?                       @db.VarChar(4)
+  expiry_date      String?                       @db.VarChar(10)
+  is_default       Int                           @default(0) @db.TinyInt
+  billing_key      String?                       @db.VarChar(500)
+  created_at       DateTime?                     @default(now()) @db.DateTime(0)
+  updated_at       DateTime?                     @default(now()) @db.DateTime(0)
+  customers        customers                     @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "customer_payment_methods_ibfk_1")
+
+  @@index([customer_id], map: "idx_customer")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model customer_refresh_tokens {
+  id          Int       @id @default(autoincrement())
+  customer_id String    @db.VarChar(255)
+  token       String    @db.VarChar(500)
+  expires_at  DateTime  @db.Timestamp(0)
+  created_at  DateTime? @default(now()) @db.Timestamp(0)
+  customers   customers @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "customer_refresh_tokens_ibfk_1")
+
+  @@index([customer_id], map: "idx_customer")
+  @@index([expires_at], map: "idx_expires_at")
+  @@index([token(length: 255)], map: "idx_token")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model customers {
+  id                       String                     @id @db.VarChar(255)
+  email                    String?                    @unique(map: "email") @db.VarChar(255)
+  name                     String?                    @db.VarChar(255)
+  phone_number             String?                    @db.VarChar(20)
+  birth_date               DateTime?                  @db.Date
+  carrier                  String?                    @db.VarChar(50)
+  gender                   customers_gender?
+  profile_image_url        String?                    @db.Text
+  provider_type            customers_provider_type
+  provider_id              String?                    @db.VarChar(255)
+  terms_agreed             Int                        @default(0) @db.TinyInt
+  privacy_agreed           Int                        @default(0) @db.TinyInt
+  location_agreed          Int                        @default(0) @db.TinyInt
+  marketing_agreed         Int                        @default(0) @db.TinyInt
+  last_login_at            DateTime?                  @db.DateTime(0)
+  created_at               DateTime?                  @default(now()) @db.Timestamp(0)
+  updated_at               DateTime?                  @default(now()) @db.Timestamp(0)
+  customer_auth_providers  customer_auth_providers[]
+  customer_devices         customer_devices[]
+  customer_payment_methods customer_payment_methods[]
+  customer_refresh_tokens  customer_refresh_tokens[]
+  phone_verifications      phone_verifications[]
+  support_tickets          support_tickets[]
+
+  @@unique([provider_type, provider_id], map: "uniq_customer_provider")
+  @@index([provider_type, provider_id], map: "idx_provider")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model daily_statistics {
+  id                     Int       @id @default(autoincrement())
+  store_id               String    @db.VarChar(255)
+  date                   DateTime  @db.Date
+  total_revenue          Int?      @default(0)
+  total_reservations     Int?      @default(0)
+  completed_reservations Int?      @default(0)
+  cancelled_reservations Int?      @default(0)
+  average_duration       Decimal?  @db.Decimal(5, 2)
+  occupancy_rate         Decimal?  @db.Decimal(5, 2)
+  created_at             DateTime? @default(now()) @db.Timestamp(0)
+  stores                 stores    @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "daily_statistics_ibfk_1")
+
+  @@unique([store_id, date], map: "unique_store_date")
+  @@index([store_id, date], map: "idx_store_date")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model email_verifications {
+  id            Int       @id @default(autoincrement())
+  email         String    @db.VarChar(255)
+  code          String    @db.VarChar(10)
+  is_verified   Boolean?  @default(false)
+  expires_at    DateTime  @db.Timestamp(0)
+  attempt_count Int?      @default(0)
+  created_at    DateTime? @default(now()) @db.Timestamp(0)
+
+  @@index([code], map: "idx_code")
+  @@index([email], map: "idx_email")
+  @@index([expires_at], map: "idx_expires_at")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model faqs {
+  id            String    @id @db.VarChar(255)
+  category      String    @db.VarChar(100)
+  question      String    @db.Text
+  answer        String    @db.Text
+  display_order Int       @default(0)
+  is_active     Int       @default(1) @db.TinyInt
+  created_at    DateTime? @default(now()) @db.DateTime(0)
+  updated_at    DateTime? @default(now()) @db.DateTime(0)
+
+  @@index([category], map: "idx_category")
+  @@index([display_order], map: "idx_order")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model notifications {
+  id                 String                  @id @db.VarChar(255)
+  store_id           String                  @db.VarChar(255)
+  type               notifications_type
+  title              String                  @db.VarChar(255)
+  message            String                  @db.Text
+  is_read            Boolean?                @default(false)
+  read_at            DateTime?               @db.Timestamp(0)
+  action_data        Json?
+  luggage_image_urls Json?
+  priority           notifications_priority? @default(normal)
+  related_id         String?                 @db.VarChar(255)
+  related_type       String?                 @db.VarChar(50)
+  action_required    Boolean?                @default(false)
+  action_url         String?                 @db.Text
+  created_at         DateTime?               @default(now()) @db.Timestamp(0)
+  stores             stores                  @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notifications_ibfk_1")
+
+  @@index([store_id, created_at], map: "idx_store_created")
+  @@index([store_id, is_read], map: "idx_store_read")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payment_webhooks {
+  id             String   @id @db.VarChar(100)
+  payment_id     BigInt   @db.UnsignedBigInt
+  pg_order_id    String   @db.VarChar(100)
+  pg_payment_key String?  @db.VarChar(100)
+  event_type     String   @db.VarChar(50)
+  status         String?  @db.VarChar(30)
+  webhook_data   Json?
+  created_at     DateTime @default(now()) @db.DateTime(0)
+  payments       payments @relation(fields: [payment_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "payment_webhooks_ibfk_1")
+
+  @@index([event_type, status, created_at], map: "idx_event_status")
+  @@index([payment_id], map: "idx_payment_id")
+  @@index([pg_order_id], map: "idx_pg_order_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payments {
+  id                                                 BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  store_id                                           String                 @db.VarChar(255)
+  user_id                                            String                 @db.VarChar(255)
+  reservation_id                                     String?                @db.VarChar(255)
+  amount_total                                       Int                    @db.UnsignedInt
+  currency                                           String                 @default("KRW") @db.VarChar(3)
+  pg_provider                                        String                 @db.VarChar(50)
+  pg_payment_key                                     String?                @unique(map: "idx_payments_pg_payment_key") @db.VarChar(100)
+  pg_order_id                                        String                 @unique(map: "idx_payments_pg_order_id") @db.VarChar(100)
+  pg_method                                          String                 @default("UNKNOWN") @db.VarChar(30)
+  status                                             payments_status        @default(PENDING)
+  paid_at                                            DateTime?              @db.DateTime(0)
+  canceled_at                                        DateTime?              @db.DateTime(0)
+  created_at                                         DateTime               @default(now()) @db.DateTime(0)
+  updated_at                                         DateTime               @default(now()) @db.DateTime(0)
+  is_settled                                         Int                    @default(0) @db.TinyInt
+  settlement_statement_id                            BigInt?                @db.UnsignedBigInt
+  payment_webhooks                                   payment_webhooks[]
+  stores                                             stores                 @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "payments_ibfk_1")
+  reservations_payments_reservation_idToreservations reservations?          @relation("payments_reservation_idToreservations", fields: [reservation_id], references: [id], onUpdate: NoAction, map: "payments_ibfk_2")
+  settlement_statements                              settlement_statements? @relation(fields: [settlement_statement_id], references: [id], onUpdate: NoAction, map: "payments_ibfk_3")
+  reservations_reservations_payment_idTopayments     reservations[]         @relation("reservations_payment_idTopayments")
+  settlement_items                                   settlement_items[]
+
+  @@index([reservation_id], map: "idx_payments_reservation")
+  @@index([store_id, paid_at], map: "idx_payments_store_paid")
+  @@index([is_settled, store_id, paid_at], map: "idx_settle")
+  @@index([settlement_statement_id], map: "settlement_statement_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model phone_verifications {
+  id           Int       @id @default(autoincrement())
+  customer_id  String    @db.VarChar(255)
+  phone_number String    @db.VarChar(20)
+  code         String    @db.VarChar(6)
+  verified     Int       @default(0) @db.TinyInt
+  attempts     Int       @default(0)
+  expires_at   DateTime  @db.DateTime(0)
+  created_at   DateTime? @default(now()) @db.DateTime(0)
+  customers    customers @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "phone_verifications_ibfk_1")
+
+  @@index([customer_id], map: "idx_customer")
+  @@index([expires_at], map: "idx_expires")
+  @@index([phone_number], map: "idx_phone")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model push_subscriptions {
+  id               Int          @id @default(autoincrement())
+  reservation_id   String       @db.VarChar(255)
+  endpoint         String       @db.Text
+  p256dh           String       @db.VarChar(500)
+  auth             String       @db.VarChar(255)
+  locale           String?      @default("en") @db.VarChar(5)
+  sent_reminder_at DateTime?    @db.DateTime(0)
+  created_at       DateTime?    @default(now()) @db.Timestamp(0)
+  reservations     reservations @relation(fields: [reservation_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "push_subscriptions_ibfk_1")
+
+  @@index([sent_reminder_at], map: "idx_reminder")
+  @@index([reservation_id], map: "idx_reservation")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model refresh_tokens {
+  id         Int       @id @default(autoincrement())
+  store_id   String    @db.VarChar(255)
+  token      String    @db.VarChar(500)
+  expires_at DateTime  @db.Timestamp(0)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  stores     stores    @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "refresh_tokens_ibfk_1")
+
+  @@index([expires_at], map: "idx_expires_at")
+  @@index([store_id], map: "idx_store_id")
+  @@index([token(length: 255)], map: "idx_token")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model reservations {
+  id                                             String                               @id @db.VarChar(255)
+  store_id                                       String                               @db.VarChar(255)
+  customer_id                                    String?                              @db.VarChar(255)
+  customer_name                                  String                               @db.VarChar(255)
+  customer_phone                                 String                               @db.VarChar(20)
+  customer_email                                 String?                              @db.VarChar(255)
+  storage_id                                     String?                              @db.VarChar(255)
+  storage_number                                 String?                              @db.VarChar(50)
+  requested_storage_type                         reservations_requested_storage_type?
+  status                                         reservations_status?                 @default(pending)
+  start_time                                     DateTime                             @db.Timestamp(0)
+  end_time                                       DateTime?                            @db.Timestamp(0)
+  request_time                                   DateTime                             @db.Timestamp(0)
+  confirmed_at                                   DateTime?                            @db.Timestamp(0)
+  actual_start_time                              DateTime?                            @db.Timestamp(0)
+  actual_end_time                                DateTime?                            @db.Timestamp(0)
+  duration                                       Int
+  bag_count                                      Int
+  total_amount                                   Int
+  message                                        String?                              @db.Text
+  special_requests                               String?                              @db.Text
+  luggage_image_urls                             Json?
+  payment_status                                 reservations_payment_status?         @default(pending)
+  payment_method                                 String?                              @db.VarChar(50)
+  payment_id                                     BigInt?                              @db.UnsignedBigInt
+  qr_code                                        String?                              @db.Text
+  created_at                                     DateTime?                            @default(now()) @db.Timestamp(0)
+  updated_at                                     DateTime?                            @default(now()) @db.Timestamp(0)
+  payments_payments_reservation_idToreservations payments[]                           @relation("payments_reservation_idToreservations")
+  push_subscriptions                             push_subscriptions[]
+  payments_reservations_payment_idTopayments     payments?                            @relation("reservations_payment_idTopayments", fields: [payment_id], references: [id], onUpdate: NoAction, map: "fk_reservation_payment")
+  stores                                         stores                               @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "reservations_ibfk_1")
+  storages                                       storages?                            @relation(fields: [storage_id], references: [id], onUpdate: NoAction, map: "reservations_ibfk_2")
+  reviews                                        reviews[]
+
+  @@index([payment_id], map: "fk_reservation_payment")
+  @@index([customer_id], map: "idx_customer")
+  @@index([id, customer_phone], map: "idx_res_id_phone")
+  @@index([customer_phone, created_at], map: "idx_res_phone_created")
+  @@index([store_id, start_time], map: "idx_store_date")
+  @@index([store_id, status], map: "idx_store_status")
+  @@index([storage_id], map: "storage_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model reviews {
+  id             String          @id @db.VarChar(255)
+  store_id       String          @db.VarChar(255)
+  customer_id    String          @db.VarChar(255)
+  customer_name  String          @db.VarChar(255)
+  reservation_id String?         @db.VarChar(255)
+  storage_id     String?         @db.VarChar(255)
+  storage_number String?         @db.VarChar(50)
+  type           reviews_type
+  rating         Int
+  comment        String          @db.Text
+  images         Json?
+  status         reviews_status? @default(pending)
+  response       String?         @db.Text
+  response_date  DateTime?       @db.Timestamp(0)
+  created_at     DateTime?       @default(now()) @db.Timestamp(0)
+  updated_at     DateTime?       @default(now()) @db.Timestamp(0)
+  stores         stores          @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "reviews_ibfk_1")
+  reservations   reservations?   @relation(fields: [reservation_id], references: [id], onUpdate: NoAction, map: "reviews_ibfk_2")
+
+  @@index([rating], map: "idx_rating")
+  @@index([store_id, status], map: "idx_store_status")
+  @@index([store_id, type], map: "idx_store_type")
+  @@index([reservation_id], map: "reservation_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model settlement_errors {
+  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  settlement_log_id BigInt?          @db.UnsignedBigInt
+  type              String           @db.VarChar(50)
+  payment_id        BigInt?          @db.UnsignedBigInt
+  store_id          String?          @db.VarChar(255)
+  statement_id      BigInt?          @db.UnsignedBigInt
+  message           String?          @db.Text
+  raw_data          Json?
+  created_at        DateTime         @default(now()) @db.DateTime(0)
+  settlement_logs   settlement_logs? @relation(fields: [settlement_log_id], references: [id], onUpdate: NoAction, map: "settlement_errors_ibfk_1")
+
+  @@index([created_at], map: "idx_created_at")
+  @@index([settlement_log_id], map: "idx_log_id")
+  @@index([payment_id], map: "idx_payment_id")
+  @@index([statement_id], map: "idx_statement_id")
+  @@index([store_id], map: "idx_store_id")
+  @@index([type], map: "idx_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model settlement_items {
+  id                    BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  statement_id          BigInt                @db.UnsignedBigInt
+  payment_id            BigInt                @db.UnsignedBigInt
+  amount                Int                   @db.UnsignedInt
+  created_at            DateTime?             @default(now()) @db.Timestamp(0)
+  settlement_statements settlement_statements @relation(fields: [statement_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "settlement_items_ibfk_1")
+  payments              payments              @relation(fields: [payment_id], references: [id], onUpdate: NoAction, map: "settlement_items_ibfk_2")
+
+  @@unique([statement_id, payment_id], map: "uniq_statement_payment")
+  @@index([payment_id], map: "idx_payment")
+  @@index([statement_id], map: "idx_statement")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model settlement_logs {
+  id                BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  started_at        DateTime               @db.DateTime(0)
+  ended_at          DateTime?              @db.DateTime(0)
+  period_start      DateTime               @db.DateTime(0)
+  period_end        DateTime               @db.DateTime(0)
+  status            settlement_logs_status
+  message           String?                @db.Text
+  error_message     String?                @db.Text
+  total_payments    Int                    @default(0) @db.UnsignedInt
+  total_statements  Int                    @default(0) @db.UnsignedInt
+  created_at        DateTime?              @default(now()) @db.Timestamp(0)
+  success_payments  Int                    @default(0) @db.UnsignedInt
+  skipped_payments  Int                    @default(0) @db.UnsignedInt
+  total_payout      Int                    @default(0) @db.UnsignedInt
+  total_commission  Int                    @default(0) @db.UnsignedInt
+  settlement_errors settlement_errors[]
+
+  @@index([period_start, period_end], map: "idx_period")
+  @@index([started_at], map: "idx_started_at")
+  @@index([status], map: "idx_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model settlement_statements {
+  id                BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  store_id          String                       @db.VarChar(255)
+  period_start      DateTime                     @db.DateTime(0)
+  period_end        DateTime                     @db.DateTime(0)
+  total_sales       Int                          @db.UnsignedInt
+  commission_rate   Decimal                      @default(0.2000) @db.Decimal(5, 4)
+  commission_amount Int                          @db.UnsignedInt
+  payout_amount     Int                          @db.UnsignedInt
+  status            settlement_statements_status @default(pending)
+  payout_at         DateTime?                    @db.DateTime(0)
+  meta              Json?
+  created_at        DateTime?                    @default(now()) @db.Timestamp(0)
+  updated_at        DateTime?                    @default(now()) @db.Timestamp(0)
+  payments          payments[]
+  settlement_items  settlement_items[]
+
+  @@index([status], map: "idx_status")
+  @@index([store_id, period_start, period_end], map: "idx_store_period")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model storages {
+  id           String           @id @db.VarChar(255)
+  store_id     String           @db.VarChar(255)
+  number       String           @db.VarChar(50)
+  type         storages_type
+  status       storages_status? @default(available)
+  width        Int?
+  height       Int?
+  depth        Int?
+  pricing      Int
+  floor        Int?
+  section      String?          @db.VarChar(10)
+  row_num      Int?
+  column_num   Int?
+  created_at   DateTime?        @default(now()) @db.Timestamp(0)
+  updated_at   DateTime?        @default(now()) @db.Timestamp(0)
+  reservations reservations[]
+  stores       stores           @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "storages_ibfk_1")
+
+  @@unique([store_id, number], map: "unique_storage_number")
+  @@index([store_id, status], map: "idx_store_status")
+  @@index([store_id, type], map: "idx_store_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model store_operating_hours {
+  id                    Int       @id @default(autoincrement())
+  store_id              String    @unique(map: "store_id") @db.VarChar(255)
+  monday_open           DateTime? @db.Time(0)
+  monday_close          DateTime? @db.Time(0)
+  monday_operating      Boolean?  @default(true)
+  tuesday_open          DateTime? @db.Time(0)
+  tuesday_close         DateTime? @db.Time(0)
+  tuesday_operating     Boolean?  @default(true)
+  wednesday_open        DateTime? @db.Time(0)
+  wednesday_close       DateTime? @db.Time(0)
+  wednesday_operating   Boolean?  @default(true)
+  thursday_open         DateTime? @db.Time(0)
+  thursday_close        DateTime? @db.Time(0)
+  thursday_operating    Boolean?  @default(true)
+  friday_open           DateTime? @db.Time(0)
+  friday_close          DateTime? @db.Time(0)
+  friday_operating      Boolean?  @default(true)
+  saturday_open         DateTime? @db.Time(0)
+  saturday_close        DateTime? @db.Time(0)
+  saturday_operating    Boolean?  @default(true)
+  sunday_open           DateTime? @db.Time(0)
+  sunday_close          DateTime? @db.Time(0)
+  sunday_operating      Boolean?  @default(false)
+  holiday_notice        String?   @db.Text
+  holiday_start_date    DateTime? @db.Date
+  holiday_end_date      DateTime? @db.Date
+  auto_schedule_enabled Boolean?  @default(false)
+  created_at            DateTime? @default(now()) @db.Timestamp(0)
+  updated_at            DateTime? @default(now()) @db.Timestamp(0)
+  stores                stores    @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_operating_hours_ibfk_1")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model store_settings {
+  id                             Int       @id @default(autoincrement())
+  store_id                       String    @unique(map: "store_id") @db.VarChar(255)
+  store_photos                   Json?
+  total_slots                    Int?      @default(20)
+  daily_rate_threshold           Int?      @default(7)
+  auto_approval                  Boolean?  @default(false)
+  auto_overdue_notification      Boolean?  @default(true)
+  s_hourly_rate                  Int?      @default(2000)
+  s_daily_rate                   Int?      @default(15000)
+  s_hour_unit                    Int?      @default(1)
+  s_max_capacity                 Int?      @default(5)
+  s_enabled                      Boolean?  @default(true)
+  m_hourly_rate                  Int?      @default(3000)
+  m_daily_rate                   Int?      @default(24000)
+  m_hour_unit                    Int?      @default(1)
+  m_max_capacity                 Int?      @default(8)
+  m_enabled                      Boolean?  @default(true)
+  l_hourly_rate                  Int?      @default(5000)
+  l_daily_rate                   Int?      @default(40000)
+  l_hour_unit                    Int?      @default(1)
+  l_max_capacity                 Int?      @default(3)
+  l_enabled                      Boolean?  @default(true)
+  xl_hourly_rate                 Int?      @default(7000)
+  xl_daily_rate                  Int?      @default(55000)
+  xl_hour_unit                   Int?      @default(1)
+  xl_max_capacity                Int?      @default(2)
+  xl_enabled                     Boolean?  @default(true)
+  special_hourly_rate            Int?      @default(10000)
+  special_daily_rate             Int?      @default(70000)
+  special_hour_unit              Int?      @default(1)
+  special_max_capacity           Int?      @default(1)
+  special_enabled                Boolean?  @default(true)
+  refrigeration_hourly_rate      Int?      @default(3000)
+  refrigeration_daily_rate       Int?      @default(20000)
+  refrigeration_hour_unit        Int?      @default(1)
+  refrigeration_max_capacity     Int?      @default(3)
+  refrigeration_enabled          Boolean?  @default(false)
+  new_reservation_notification   Boolean?  @default(true)
+  checkout_reminder_notification Boolean?  @default(true)
+  overdue_notification           Boolean?  @default(true)
+  system_notification            Boolean?  @default(true)
+  categories                     Json?
+  created_at                     DateTime? @default(now()) @db.Timestamp(0)
+  updated_at                     DateTime? @default(now()) @db.Timestamp(0)
+  stores                         stores    @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_settings_ibfk_1")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model store_settlement_accounts {
+  id                  BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  store_id            String    @unique(map: "unique_store_account") @db.VarChar(255)
+  bank_name           String    @db.VarChar(50)
+  bank_code           String    @db.VarChar(10)
+  account_number      String    @db.VarChar(255)
+  account_holder_name String    @db.VarChar(100)
+  verified            Int       @default(0) @db.TinyInt
+  verified_at         DateTime? @db.DateTime(0)
+  verification_result Json?
+  verification_error  String?   @db.Text
+  created_at          DateTime  @default(now()) @db.DateTime(0)
+  updated_at          DateTime  @default(now()) @db.DateTime(0)
+  stores              stores    @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_settlement_accounts_ibfk_1")
+
+  @@index([verified], map: "idx_verified")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model store_status {
+  id               Int                 @id @default(autoincrement())
+  store_id         String              @db.VarChar(255)
+  status           store_status_status
+  reason           String?             @db.Text
+  reopen_time      DateTime?           @db.Timestamp(0)
+  today_open_time  DateTime?           @db.Time(0)
+  today_close_time DateTime?           @db.Time(0)
+  created_at       DateTime?           @default(now()) @db.Timestamp(0)
+  updated_at       DateTime?           @default(now()) @db.Timestamp(0)
+  stores           stores              @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_status_ibfk_1")
+
+  @@index([status], map: "idx_status")
+  @@index([store_id], map: "idx_store_id")
+  @@index([updated_at], map: "idx_updated_at")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model stores {
+  id                        String                     @id @db.VarChar(255)
+  email                     String                     @unique(map: "email") @db.VarChar(255)
+  password_hash             String                     @db.VarChar(255)
+  store_pin_hash            String?                    @db.VarChar(255)
+  store_pin_updated_at      DateTime?                  @db.DateTime(0)
+  store_pin_failed_count    Int                        @default(0)
+  store_pin_locked_until    DateTime?                  @db.DateTime(0)
+  phone_number              String?                    @db.VarChar(20)
+  store_phone_number        String?                    @db.VarChar(20)
+  wants_sms_notification    Boolean                    @default(false)
+  business_type             stores_business_type?
+  profile_image_url         String?                    @db.Text
+  has_completed_setup       Boolean?                   @default(false)
+  business_number           String?                    @unique(map: "business_number") @db.VarChar(50)
+  business_name             String                     @db.VarChar(255)
+  slug                      String?                    @unique(map: "uniq_store_slug") @db.VarChar(80)
+  representative_name       String?                    @db.VarChar(255)
+  address                   String?                    @db.Text
+  detail_address            String?                    @db.Text
+  latitude                  Decimal?                   @db.Decimal(10, 8)
+  longitude                 Decimal?                   @db.Decimal(11, 8)
+  description               String?                    @db.Text
+  created_at                DateTime?                  @default(now()) @db.Timestamp(0)
+  updated_at                DateTime?                  @default(now()) @db.Timestamp(0)
+  daily_statistics          daily_statistics[]
+  notifications             notifications[]
+  payments                  payments[]
+  refresh_tokens            refresh_tokens[]
+  reservations              reservations[]
+  reviews                   reviews[]
+  storages                  storages[]
+  store_operating_hours     store_operating_hours?
+  store_settings            store_settings?
+  store_settlement_accounts store_settlement_accounts?
+  store_status              store_status[]
+
+  @@index([business_number], map: "idx_business_number")
+  @@index([email], map: "idx_email")
+  @@index([latitude, longitude], map: "idx_location")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model support_messages {
+  id              String          @id @db.VarChar(255)
+  ticket_id       String          @db.VarChar(255)
+  message         String          @db.Text
+  is_from_user    Int             @default(1) @db.TinyInt
+  created_at      DateTime?       @default(now()) @db.DateTime(0)
+  support_tickets support_tickets @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "support_messages_ibfk_1")
+
+  @@index([ticket_id], map: "idx_ticket")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model support_tickets {
+  id               String                   @id @db.VarChar(255)
+  customer_id      String                   @db.VarChar(255)
+  title            String                   @db.VarChar(255)
+  status           support_tickets_status   @default(open)
+  priority         support_tickets_priority @default(medium)
+  category         String?                  @default("일반") @db.VarChar(100)
+  last_message_at  DateTime?                @db.DateTime(0)
+  created_at       DateTime?                @default(now()) @db.DateTime(0)
+  updated_at       DateTime?                @default(now()) @db.DateTime(0)
+  support_messages support_messages[]
+  customers        customers                @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "support_tickets_ibfk_1")
+
+  @@index([customer_id], map: "idx_customer")
+  @@index([status], map: "idx_status")
+}
+
+enum customer_auth_providers_provider_type {
+  kakao
+  naver
+  apple
+  local
+}
+
+enum customer_payment_methods_type {
+  card
+  bank
+}
+
+enum notifications_type {
+  newReservation
+  checkoutReminder
+  overdue
+  checkinComplete
+  systemUpdate
+  revenue
+}
+
+enum store_status_status {
+  open
+  closed
+  temporarily_closed
+}
+
+enum coupon_policies_type {
+  payment_discount
+  store_benefit
+}
+
+enum coupons_type {
+  payment_discount
+  store_benefit
+}
+
+enum customer_devices_device_type {
+  ios
+  android
+}
+
+enum storages_type {
+  s
+  m
+  l
+  xl
+  special
+  refrigeration
+}
+
+enum support_tickets_status {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum storages_status {
+  available
+  occupied
+  maintenance
+}
+
+enum support_tickets_priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum settlement_logs_status {
+  noop
+  success
+  partial
+  failed
+}
+
+enum customers_gender {
+  M
+  F
+}
+
+enum reviews_type {
+  storage
+  store
+}
+
+enum customers_provider_type {
+  kakao
+  naver
+  apple
+  local
+}
+
+enum reservations_requested_storage_type {
+  s
+  m
+  l
+  xl
+  special
+  refrigeration
+}
+
+enum settlement_statements_status {
+  pending
+  paid
+  failed
+}
+
+enum notifications_priority {
+  low
+  normal
+  high
+}
+
+enum reservations_status {
+  pending
+  pending_approval
+  confirmed
+  rejected
+  in_progress
+  completed
+  cancelled
+}
+
+enum coupon_policies_auto_issue_on {
+  manual_claim
+  signup
+  checkin_completed
+}
+
+enum payments_status {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum stores_business_type {
+  RESTAURANT
+  CAFE
+  HOTEL
+  OTHER
+}
+
+enum reviews_status {
+  pending
+  responded
+}
+
+enum coupons_status {
+  active
+  used
+  expired
+}
+
+enum reservations_payment_status {
+  pending
+  paid
+  refunded
+}
