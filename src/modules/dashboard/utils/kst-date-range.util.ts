@@ -24,9 +24,7 @@ export const getKstDateRange = (
   const from = query.from ?? addKstDays(to, -(defaultDays - 1));
   const start = toKstStart(from);
   const endExclusive = toKstStart(addKstDays(to, 1));
-  const days = Math.round(
-    (endExclusive.getTime() - start.getTime()) / DAY_MS,
-  );
+  const days = Math.round((endExclusive.getTime() - start.getTime()) / DAY_MS);
 
   if (days <= 0) {
     throw new BadRequestException({
@@ -60,10 +58,7 @@ export const addKstDays = (dateString: string, days: number): string => {
 const toKstStart = (dateString: string): Date => {
   const date = new Date(`${dateString}T00:00:00+09:00`);
 
-  if (
-    Number.isNaN(date.getTime()) ||
-    getKstDateString(date) !== dateString
-  ) {
+  if (Number.isNaN(date.getTime()) || getKstDateString(date) !== dateString) {
     throw new BadRequestException({
       code: 'INVALID_DATE',
       message: '날짜는 YYYY-MM-DD 형식의 올바른 KST 일자여야 합니다.',

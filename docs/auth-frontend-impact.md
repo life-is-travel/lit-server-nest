@@ -142,3 +142,34 @@ DELETE /api/storages/:id
 
 - 한 번에 전체를 가져오는 방식 대신 페이지네이션 유지
 - 큰 목록이 필요하면 `page`, `limit`으로 순차 조회
+
+## Dashboard 모듈 Express 호환 변경
+
+Dashboard API는 기존 Express 서버와 호환되도록 아래 3개 엔드포인트만 제공합니다.
+
+```txt
+GET /api/dashboard/summary
+GET /api/dashboard/stats?period=daily|weekly|monthly|yearly
+GET /api/dashboard/realtime
+```
+
+기존 NestJS 초안에 있던 아래 분석용 엔드포인트는 제거했습니다.
+
+```txt
+GET /api/dashboard/revenue
+GET /api/dashboard/reservations
+GET /api/dashboard/storages
+```
+
+프론트 필요 작업:
+
+- 대시보드 화면은 기존 Express 호환 엔드포인트 3개만 호출
+- `/api/dashboard/revenue`, `/api/dashboard/reservations`, `/api/dashboard/storages` 호출 제거
+- `/summary` 응답은 기존처럼 flat 구조로 처리
+- `/stats`는 `period` query를 `daily`, `weekly`, `monthly`, `yearly` 중 하나로 전달
+
+운영 보정 사항:
+
+- 기존 Express의 `active`, `approved` 예약 상태는 현재 DB enum에 없으므로 `confirmed`, `in_progress`를 활성 예약으로 집계합니다.
+- 날짜 범위는 KST 기준으로 계산합니다.
+- 매출은 기존 호환을 위해 `reservations.payment_status = paid`와 `reservations.total_amount` 기준으로 집계합니다.

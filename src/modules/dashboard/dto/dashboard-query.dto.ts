@@ -1,22 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, Matches } from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+export enum DashboardStatsPeriod {
+  Daily = 'daily',
+  Weekly = 'weekly',
+  Monthly = 'monthly',
+  Yearly = 'yearly',
+}
 
-export class DashboardDateRangeQueryDto {
+export class DashboardStatsQueryDto {
   @ApiPropertyOptional({
-    example: '2026-04-01',
-    description: '조회 시작일입니다. KST 기준 YYYY-MM-DD 형식입니다.',
+    enum: DashboardStatsPeriod,
+    default: DashboardStatsPeriod.Monthly,
   })
   @IsOptional()
-  @Matches(DATE_PATTERN)
-  from?: string;
-
-  @ApiPropertyOptional({
-    example: '2026-04-26',
-    description: '조회 종료일입니다. KST 기준 YYYY-MM-DD 형식입니다.',
-  })
-  @IsOptional()
-  @Matches(DATE_PATTERN)
-  to?: string;
+  @IsEnum(DashboardStatsPeriod)
+  period: DashboardStatsPeriod = DashboardStatsPeriod.Monthly;
 }

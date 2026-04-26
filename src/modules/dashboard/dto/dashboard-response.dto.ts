@@ -1,139 +1,139 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DashboardStatsPeriod } from './dashboard-query.dto';
 
-export class DashboardReservationStatusCountsDto {
+export class DashboardSummaryResponseDto {
   @ApiProperty()
-  pending!: number;
-
-  @ApiProperty()
-  pendingApproval!: number;
+  storeName!: string;
 
   @ApiProperty()
-  confirmed!: number;
+  totalReservations!: number;
 
   @ApiProperty()
-  rejected!: number;
+  pendingReservations!: number;
 
   @ApiProperty()
-  inProgress!: number;
+  activeReservations!: number;
+
+  @ApiProperty()
+  completedReservations!: number;
+
+  @ApiProperty()
+  todayReservations!: number;
+
+  @ApiProperty()
+  totalRevenue!: number;
+
+  @ApiProperty()
+  todayRevenue!: number;
+
+  @ApiProperty()
+  totalStorages!: number;
+
+  @ApiProperty()
+  availableStorages!: number;
+
+  @ApiProperty()
+  occupiedStorages!: number;
+
+  @ApiProperty()
+  occupancyRate!: number;
+
+  @ApiPropertyOptional()
+  createdAt?: Date | null;
+
+  @ApiPropertyOptional()
+  updatedAt?: Date | null;
+}
+
+export class DashboardStatsRevenueDto {
+  @ApiProperty()
+  total!: number;
+
+  @ApiProperty()
+  average!: number;
+
+  @ApiProperty()
+  count!: number;
+
+  @ApiProperty()
+  growth!: number;
+}
+
+export class DashboardStatsReservationsDto {
+  @ApiProperty()
+  total!: number;
 
   @ApiProperty()
   completed!: number;
 
   @ApiProperty()
   cancelled!: number;
+
+  @ApiProperty()
+  completionRate!: number;
 }
 
-export class DashboardStorageStatusCountsDto {
-  @ApiProperty()
-  available!: number;
+export class DashboardStatsOccupancyDto {
+  @ApiProperty({ example: '0.25' })
+  average!: string;
 
   @ApiProperty()
-  occupied!: number;
+  peak!: number;
 
-  @ApiProperty()
-  maintenance!: number;
+  @ApiPropertyOptional({ nullable: true })
+  peakTime!: Date | null;
 }
 
-export class DashboardSummaryReservationsDto extends DashboardReservationStatusCountsDto {
+export class DashboardCustomerSatisfactionDto {
+  @ApiProperty({ example: '4.5' })
+  averageRating!: string;
+
   @ApiProperty()
-  total!: number;
+  totalReviews!: number;
+
+  @ApiProperty()
+  responseRate!: number;
 }
 
-export class DashboardSummaryRevenueDto {
-  @ApiProperty()
-  totalRevenue!: number;
+export class DashboardStatsResponseDto {
+  @ApiProperty({ enum: DashboardStatsPeriod })
+  period!: DashboardStatsPeriod;
 
-  @ApiProperty()
-  paidPaymentCount!: number;
+  @ApiProperty({ type: DashboardStatsRevenueDto })
+  revenue!: DashboardStatsRevenueDto;
+
+  @ApiProperty({ type: DashboardStatsReservationsDto })
+  reservations!: DashboardStatsReservationsDto;
+
+  @ApiProperty({ type: DashboardStatsOccupancyDto })
+  occupancy!: DashboardStatsOccupancyDto;
+
+  @ApiProperty({ type: DashboardCustomerSatisfactionDto })
+  customerSatisfaction!: DashboardCustomerSatisfactionDto;
 }
 
-export class DashboardSummaryStoragesDto extends DashboardStorageStatusCountsDto {
+export class DashboardRealtimeResponseDto {
   @ApiProperty()
-  total!: number;
-}
-
-export class DashboardSummaryResponseDto {
-  @ApiProperty({ example: '2026-04-26' })
-  date!: string;
-
-  @ApiProperty({ type: DashboardSummaryReservationsDto })
-  reservations!: DashboardSummaryReservationsDto;
-
-  @ApiProperty({ type: DashboardSummaryRevenueDto })
-  revenue!: DashboardSummaryRevenueDto;
-
-  @ApiProperty({ type: DashboardSummaryStoragesDto })
-  storages!: DashboardSummaryStoragesDto;
-}
-
-export class DashboardRevenueDailyItemDto {
-  @ApiProperty({ example: '2026-04-26' })
-  date!: string;
+  storeStatus!: string;
 
   @ApiProperty()
-  revenue!: number;
+  activeReservations!: number;
 
   @ApiProperty()
-  paymentCount!: number;
-}
-
-export class DashboardRevenueResponseDto {
-  @ApiProperty({ example: '2026-04-01' })
-  from!: string;
-
-  @ApiProperty({ example: '2026-04-26' })
-  to!: string;
+  pendingReservations!: number;
 
   @ApiProperty()
-  totalRevenue!: number;
+  todayRevenue!: number;
 
   @ApiProperty()
-  paidPaymentCount!: number;
-
-  @ApiProperty({ type: [DashboardRevenueDailyItemDto] })
-  items!: DashboardRevenueDailyItemDto[];
-}
-
-export class DashboardReservationDailyItemDto extends DashboardReservationStatusCountsDto {
-  @ApiProperty({ example: '2026-04-26' })
-  date!: string;
+  occupiedStorages!: number;
 
   @ApiProperty()
-  total!: number;
-}
-
-export class DashboardReservationsResponseDto {
-  @ApiProperty({ example: '2026-04-01' })
-  from!: string;
-
-  @ApiProperty({ example: '2026-04-26' })
-  to!: string;
+  availableStorages!: number;
 
   @ApiProperty()
-  totalReservations!: number;
-
-  @ApiProperty({ type: DashboardReservationStatusCountsDto })
-  byStatus!: DashboardReservationStatusCountsDto;
-
-  @ApiProperty({ type: [DashboardReservationDailyItemDto] })
-  items!: DashboardReservationDailyItemDto[];
-}
-
-export class DashboardStorageTypeItemDto extends DashboardStorageStatusCountsDto {
-  @ApiProperty({ example: 's' })
-  type!: string;
+  unreadNotifications!: number;
 
   @ApiProperty()
-  total!: number;
-}
-
-export class DashboardStoragesResponseDto {
-  @ApiProperty()
-  total!: number;
-
-  @ApiProperty({ type: DashboardStorageStatusCountsDto })
-  byStatus!: DashboardStorageStatusCountsDto;
-
-  @ApiProperty({ type: [DashboardStorageTypeItemDto] })
-  byType!: DashboardStorageTypeItemDto[];
+  lastUpdated!: Date;
 }

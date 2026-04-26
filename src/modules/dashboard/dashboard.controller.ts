@@ -1,54 +1,56 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentStoreId } from '../auth/decorators/current-store.decorator';
 import { StoreAuthGuard } from '../auth/guards/store-auth.guard';
-import { DashboardDateRangeQueryDto } from './dto/dashboard-query.dto';
+import { DashboardStatsQueryDto } from './dto/dashboard-query.dto';
 import {
-  DashboardReservationsResponseDto,
-  DashboardRevenueResponseDto,
-  DashboardStoragesResponseDto,
+  DashboardRealtimeResponseDto,
+  DashboardStatsResponseDto,
   DashboardSummaryResponseDto,
 } from './dto/dashboard-response.dto';
-import { DashboardQueryService } from './services/dashboard-query.service';
+import { DashboardRealtimeService } from './services/dashboard-realtime.service';
+import { DashboardStatsService } from './services/dashboard-stats.service';
+import { DashboardSummaryService } from './services/dashboard-summary.service';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
 @UseGuards(StoreAuthGuard)
 @Controller('api/dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardQueryService: DashboardQueryService) {}
+  constructor(
+    private readonly dashboardSummaryService: DashboardSummaryService,
+    private readonly dashboardStatsService: DashboardStatsService,
+    private readonly dashboardRealtimeService: DashboardRealtimeService,
+  ) {}
 
   @Get('summary')
-  @ApiOperation({ summary: '대시보드 요약 지표를 조회합니다.' })
+  @ApiOperation({ summary: '기존 Express 호환 대시보드 요약을 조회합니다.' })
   @ApiOkResponse({ type: DashboardSummaryResponseDto })
   getSummary(@CurrentStoreId() storeId: string) {
-    return this.dashboardQueryService.getSummary(storeId);
+    return this.dashboardSummaryService.getSummary(storeId);
   }
 
-  @Get('revenue')
-  @ApiOperation({ summary: '일자별 매출 지표를 조회합니다.' })
-  @ApiOkResponse({ type: DashboardRevenueResponseDto })
-  getRevenue(
+  @Get('stats')
+  @ApiOperation({
+    summary: '기존 Express 호환 기간별 대시보드 통계를 조회합니다.',
+  })
+  @ApiOkResponse({ type: DashboardStatsResponseDto })
+  getStats(
     @CurrentStoreId() storeId: string,
-    @Query() query: DashboardDateRangeQueryDto,
+    @Query() query: DashboardStatsQueryDto,
   ) {
-    return this.dashboardQueryService.getRevenue(storeId, query);
+    return this.dashboardStatsService.getStats(storeId, query);
   }
 
-  @Get('reservations')
-  @ApiOperation({ summary: '일자별 예약 지표를 조회합니다.' })
-  @ApiOkResponse({ type: DashboardReservationsResponseDto })
-  getReservations(
-    @CurrentStoreId() storeId: string,
-    @Query() query: DashboardDateRangeQueryDto,
-  ) {
-    return this.dashboardQueryService.getReservations(storeId, query);
-  }
-
-  @Get('storages')
-  @ApiOperation({ summary: '보관함 운영 현황을 조회합니다.' })
-  @ApiOkResponse({ type: DashboardStoragesResponseDto })
-  getStorages(@CurrentStoreId() storeId: string) {
-    return this.dashboardQueryService.getStorages(storeId);
+  @Get('realtime')
+  @ApiOperation({ summary: '기존 Express 호환 실시간 대시보드를 조회합니다.' })
+  @ApiOkResponse({ type: DashboardRealtimeResponseDto })
+  getRealtime(@CurrentStoreId() storeId: string) {
+    return this.dashboardRealtimeService.getRealtime(storeId);
   }
 }
