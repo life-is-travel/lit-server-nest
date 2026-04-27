@@ -308,3 +308,31 @@ PUT    /api/customer/auth/notification-settings
 - `/refresh` 응답의 새 `refreshToken`을 저장 중인 refresh token과 교체해야 합니다.
 - 여러 화면에서 동시에 `/refresh`가 발생하지 않도록 refresh 요청 단일화가 필요합니다.
 - Kakao 외 provider를 실제로 사용하려면 provider별 access token 검증 흐름이 추가된 뒤 활성화해야 합니다.
+
+## Customer Stores 모듈 이전 영향
+
+고객 앱용 매장 조회 API가 기존 Express 서버와 같은 경로로 추가되었습니다.
+
+```txt
+GET /api/customer/stores
+GET /api/customer/stores/:storeId
+```
+
+호환 유지 사항:
+
+- `GET /api/customer/stores`는 기존처럼 `{ items: [...] }` 구조를 반환합니다.
+- 매장 식별자는 상세 조회에서 내부 `id`와 고객 공유용 `slug`를 모두 허용합니다.
+- 매장 연락처는 `store_phone_number`를 우선 사용하고, 없으면 기존 데이터 호환을 위해 `phone_number`를 반환합니다.
+- `reviews`, `operatingHours`, `settings`는 기존 Express처럼 camelCase로 변환해 반환합니다.
+
+운영 보정 사항:
+
+- `limit`은 최대 100으로 제한합니다.
+- `keyword`는 최대 100자로 제한하고 매장명/주소에만 적용합니다.
+- 목록 조회의 중첩 `reviews`는 매장별 최신 20개까지만 포함합니다. 전체 리뷰 목록이 필요하면 별도 리뷰 API로 분리하는 것이 맞습니다.
+- 위도/경도 Decimal 값은 JSON 응답에서 number로 변환합니다.
+
+프론트 필요 작업:
+
+- 기존 목록/상세 조회 경로는 그대로 사용할 수 있습니다.
+- 목록 화면에서 전체 리뷰가 필요하다면 향후 리뷰 전용 API 연동으로 분리해야 합니다.
