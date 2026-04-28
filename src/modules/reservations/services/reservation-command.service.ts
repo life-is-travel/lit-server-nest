@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  coupon_policies_auto_issue_on,
   Prisma,
   reservations_payment_status,
   reservations_status,
@@ -11,6 +13,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { CouponAutoIssueService } from '../../coupons/services/coupon-auto-issue.service';
 import { RELEASE_STORAGE_STATUSES } from '../reservation.constants';
 import {
   CreateCustomerReservationDto,
@@ -26,11 +29,14 @@ import { ReservationStorageService } from './reservation-storage.service';
 
 @Injectable()
 export class ReservationCommandService {
+  private readonly logger = new Logger(ReservationCommandService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly reservationQueryService: ReservationQueryService,
     private readonly reservationStatusService: ReservationStatusService,
     private readonly reservationStorageService: ReservationStorageService,
+    private readonly couponAutoIssueService: CouponAutoIssueService,
   ) {}
 
   async createStoreReservation(
@@ -293,7 +299,7 @@ export class ReservationCommandService {
     reservationId: string,
     dto: StoreCheckinDto,
   ): Promise<ReservationStatusResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const reservation = await tx.reservations.findFirst({
         where: {
           id: reservationId,
@@ -326,8 +332,21 @@ export class ReservationCommandService {
         id: reservation.id,
         status: reservations_status.in_progress,
         photos,
+        couponIssueContext: {
+          customerId: reservation.customer_id,
+          phoneNumber: reservation.customer_phone,
+          storeId: reservation.store_id,
+          reservationId: reservation.id,
+        },
       };
     });
+
+    await this.issueCheckinCouponsSafely(result.couponIssueContext);
+
+    const { couponIssueContext, ...response } = result;
+    void couponIssueContext;
+
+    return response;
   }
 
   async customerCheckout(
@@ -397,5 +416,31 @@ export class ReservationCommandService {
         message: '점포를 찾을 수 없습니다.',
       });
     }
+  }
+
+  private async issueCheckinCouponsSafely(context: {
+    customerId: string | null;
+    phoneNumber: string;
+    storeId: string;
+    reservationId: string;
+  }): Promise<void> {
+    const isRegisteredCustomer =
+      !!context.customerId && context.customerId.startsWith('customer_');
+
+    await this.couponAutoIssueService
+      .issueForTrigger({
+        customerId: isRegisteredCustomer ? context.customerId : null,
+        phoneSnapshot: isRegisteredCustomer ? null : context.phoneNumber,
+        storeId: context.storeId,
+        trigger: coupon_policies_auto_issue_on.checkin_completed,
+        reservationId: context.reservationId,
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `checkin coupon auto issue failed: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      });
   }
 }

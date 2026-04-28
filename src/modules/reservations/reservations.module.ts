@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { CouponsModule } from '../coupons/coupons.module';
 import { CustomerReservationsController } from './customer-reservations.controller';
 import { GuestReservationsController } from './guest-reservations.controller';
 import { ReservationsController } from './reservations.controller';
@@ -10,7 +11,7 @@ import { ReservationStatusService } from './services/reservation-status.service'
 import { ReservationStorageService } from './services/reservation-storage.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, CouponsModule],
   controllers: [
     ReservationsController,
     CustomerReservationsController,

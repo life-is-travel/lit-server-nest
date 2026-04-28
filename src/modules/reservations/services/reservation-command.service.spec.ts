@@ -38,6 +38,9 @@ const createReservationCommandService = () => {
   const reservationStorageService = new ReservationStorageService(
     prisma as never,
   );
+  const couponAutoIssueService = {
+    issueForTrigger: jest.fn().mockResolvedValue([]),
+  };
 
   return {
     service: new ReservationCommandService(
@@ -45,9 +48,11 @@ const createReservationCommandService = () => {
       reservationQueryService as never,
       reservationStatusService,
       reservationStorageService,
+      couponAutoIssueService as never,
     ),
     prisma,
     tx,
+    couponAutoIssueService,
   };
 };
 
@@ -155,6 +160,38 @@ describe('ReservationCommandService', () => {
     expect(result).toEqual({
       id: 'res_1',
       status: reservations_status.completed,
+    });
+  });
+
+  it('issues phone based coupons after guest checkin succeeds', async () => {
+    const { service, tx, couponAutoIssueService } =
+      createReservationCommandService();
+
+    tx.reservations.findFirst.mockResolvedValue({
+      id: 'res_1',
+      store_id: 'store_1',
+      customer_id: 'guest_01012345678_1',
+      customer_phone: '010-1234-5678',
+      status: reservations_status.confirmed,
+      actual_start_time: null,
+      luggage_image_urls: null,
+    });
+
+    const result = await service.storeCheckin('store_1', 'res_1', {
+      photoUrls: [],
+    });
+
+    expect(couponAutoIssueService.issueForTrigger).toHaveBeenCalledWith({
+      customerId: null,
+      phoneSnapshot: '010-1234-5678',
+      storeId: 'store_1',
+      trigger: 'checkin_completed',
+      reservationId: 'res_1',
+    });
+    expect(result).toEqual({
+      id: 'res_1',
+      status: reservations_status.in_progress,
+      photos: [],
     });
   });
 });
