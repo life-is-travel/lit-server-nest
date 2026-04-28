@@ -66,6 +66,34 @@ export class RedeemStoreBenefitCouponDto {
   storePin!: string;
 }
 
+export class GuestCouponAccessQueryDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(30)
+  phoneNumber!: string;
+
+  @ApiProperty({ description: '비회원 예약 조회 토큰' })
+  @IsString()
+  @MaxLength(255)
+  token!: string;
+}
+
+export class RedeemGuestStoreBenefitCouponDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(30)
+  phoneNumber!: string;
+
+  @ApiProperty({ description: '비회원 예약 조회 토큰' })
+  @IsString()
+  @MaxLength(255)
+  token!: string;
+
+  @ApiProperty({ description: '매장 직원이 입력하는 4자리 PIN' })
+  @Matches(/^\d{4}$/, { message: 'storePin은 4자리 숫자여야 합니다.' })
+  storePin!: string;
+}
+
 export class CouponResponseDto {
   @ApiProperty()
   id!: string;

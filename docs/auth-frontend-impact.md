@@ -393,3 +393,37 @@ POST /api/customer/coupons/:id/redeem
 - 매장 혜택 쿠폰 사용 화면에는 매장 직원이 입력할 4자리 PIN 입력 UI가 필요합니다.
 - 결제 할인 쿠폰은 결제 화면에서 선택 후보로 표시할 수 있지만, 실제 금액 차감은 결제 모듈 도입 후 연결해야 합니다.
 - 기존 `/use` 호출이 있다면 body에 `storePin`을 포함하거나 `/redeem`으로 전환해야 합니다.
+
+## Guest Coupons 모듈 영향
+
+비회원 전화번호 기반 쿠폰 자동 발급과 조회/사용 API가 추가되었습니다.
+
+```txt
+GET  /api/guest/coupons?phoneNumber={phoneNumber}&token={reservationToken}
+GET  /api/guest/coupons/:id?phoneNumber={phoneNumber}&token={reservationToken}
+POST /api/guest/coupons/:id/redeem
+```
+
+동작 기준:
+
+- 매장 체크인 완료 시 로그인 고객은 `customerId` 기준, 비회원은 `phone_snapshot` 기준으로 쿠폰을 자동 발급합니다.
+- 비회원 쿠폰 조회는 전화번호와 비회원 예약 조회 토큰을 함께 검증합니다.
+- 비회원 쿠폰 사용은 전화번호, 예약 조회 토큰, 매장 PIN을 모두 검증합니다.
+- 비회원 쿠폰의 내부 `customerId`는 `guest_phone_{normalizedPhone}` 형식으로 저장됩니다.
+- `reservation_completed` 트리거는 계속 사용하지 않습니다.
+
+비회원 쿠폰 사용 요청 예시:
+
+```json
+{
+  "phoneNumber": "01012345678",
+  "token": "guest-reservation-token",
+  "storePin": "1234"
+}
+```
+
+프론트 필요 작업:
+
+- 비회원 예약 조회 화면에서 받은 예약 토큰을 쿠폰 조회/사용 요청에도 전달해야 합니다.
+- 비회원 쿠폰함 화면은 전화번호와 예약 토큰이 있는 상태에서만 호출해야 합니다.
+- 매장 혜택 쿠폰 사용 화면은 로그인 고객과 동일하게 매장 PIN 입력 UI가 필요합니다.
