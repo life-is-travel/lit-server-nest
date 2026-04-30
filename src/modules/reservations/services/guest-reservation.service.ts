@@ -357,25 +357,47 @@ export class GuestReservationService {
 
     this.assertValidTimeRange(startTime, endTime);
 
+    // 설정은 한 번만 조회하고, 예약 수량은 storage type 기준으로 한 번에 집계합니다.
+    const [settings, aggregated] = await Promise.all([
+      this.prisma.store_settings.findUnique({
+        where: { store_id: store.id },
+      }),
+      this.prisma.reservations.groupBy({
+        by: ['requested_storage_type'],
+        where: {
+          store_id: store.id,
+          requested_storage_type: { in: ALLOWED_STORAGE_TYPES },
+          status: { in: CAPACITY_COUNT_STATUSES },
+          payment_status: { not: reservations_payment_status.refunded },
+          start_time: { lt: endTime },
+          end_time: { gt: startTime },
+        },
+        _sum: { bag_count: true },
+      }),
+    ]);
+    const countByType = new Map<reservations_requested_storage_type, number>();
+
+    for (const row of aggregated) {
+      if (row.requested_storage_type) {
+        countByType.set(
+          row.requested_storage_type,
+          row._sum.bag_count ?? 0,
+        );
+      }
+    }
+
     const items: GuestAvailabilityResponseDto['items'] = {};
 
-    await Promise.all(
-      ALLOWED_STORAGE_TYPES.map(async (storageType) => {
-        const capacity = await this.checkCapacity({
-          storeId: store.id,
-          storageType,
-          startTime,
-          endTime,
-          bagCount: 0,
-        });
+    for (const storageType of ALLOWED_STORAGE_TYPES) {
+      const maxCapacity = this.getMaxCapacity(settings, storageType);
+      const currentCount = countByType.get(storageType) ?? 0;
 
-        items[storageType] = {
-          maxCapacity: capacity.maxCapacity,
-          currentCount: capacity.currentCount,
-          remaining: Math.max(0, capacity.maxCapacity - capacity.currentCount),
-        };
-      }),
-    );
+      items[storageType] = {
+        maxCapacity,
+        currentCount,
+        remaining: Math.max(0, maxCapacity - currentCount),
+      };
+    }
 
     return {
       storeId: query.storeId,
