@@ -379,10 +379,7 @@ export class GuestReservationService {
 
     for (const row of aggregated) {
       if (row.requested_storage_type) {
-        countByType.set(
-          row.requested_storage_type,
-          row._sum.bag_count ?? 0,
-        );
+        countByType.set(row.requested_storage_type, row._sum.bag_count ?? 0);
       }
     }
 
