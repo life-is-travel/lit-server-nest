@@ -427,3 +427,35 @@ POST /api/guest/coupons/:id/redeem
 - 비회원 예약 조회 화면에서 받은 예약 토큰을 쿠폰 조회/사용 요청에도 전달해야 합니다.
 - 비회원 쿠폰함 화면은 전화번호와 예약 토큰이 있는 상태에서만 호출해야 합니다.
 - 매장 혜택 쿠폰 사용 화면은 로그인 고객과 동일하게 매장 PIN 입력 UI가 필요합니다.
+
+## Customer Stores 예약 카운트 응답 영향
+
+고객용 매장 목록/상세 응답에 `reservationCount` 필드가 추가되었습니다.
+
+```txt
+GET /api/customer/stores
+GET /api/customer/stores/:storeId
+```
+
+응답 예시:
+
+```json
+{
+  "id": "store_f8374164-236b-4e33-984a-b1d5d48d1714",
+  "slug": "bean-mamapapa",
+  "businessName": "빈마마파파",
+  "reservationCount": 12
+}
+```
+
+동작 기준:
+
+- `reservationCount`는 `cancelled`, `rejected` 상태를 제외한 예약 수입니다.
+- 별도 카운트 조회 API는 추가하지 않습니다.
+- 매장 목록과 매장 상세 조회 응답에서 동일하게 내려갑니다.
+- 예약이 없으면 `0`으로 내려갑니다.
+
+프론트 필요 작업:
+
+- 랜딩/고객 매장 카드나 상세 모달에서 `reservationCount > 0`일 때만 예약 건수 pill을 노출할 수 있습니다.
+- 기존 응답 필드는 제거되지 않았으므로 기존 화면은 그대로 동작합니다.

@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, reservations_status } from '@prisma/client';
 
 const CUSTOMER_STORE_BASE_SELECT = {
   id: true,
@@ -12,6 +12,20 @@ const CUSTOMER_STORE_BASE_SELECT = {
   longitude: true,
   store_operating_hours: true,
   store_settings: true,
+  _count: {
+    select: {
+      reservations: {
+        where: {
+          status: {
+            notIn: [
+              reservations_status.cancelled,
+              reservations_status.rejected,
+            ],
+          },
+        },
+      },
+    },
+  },
 } satisfies Prisma.storesSelect;
 
 export const CUSTOMER_STORE_LIST_SELECT = {
