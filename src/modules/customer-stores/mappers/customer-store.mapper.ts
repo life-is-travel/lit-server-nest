@@ -23,6 +23,7 @@ export const toCustomerStoreResponse = (
   settings: store.store_settings
     ? (camelize(store.store_settings) as Record<string, unknown>)
     : null,
+  reservationCount: store._count.reservations,
 });
 
 const decimalToNumber = (value: Prisma.Decimal | null): number | null => {

@@ -58,6 +58,12 @@ export class CustomerStoreResponseDto {
 
   @ApiPropertyOptional({ type: Object })
   settings!: Record<string, unknown> | null;
+
+  @ApiProperty({
+    default: 0,
+    description: '취소/거절을 제외한 매장 예약 수',
+  })
+  reservationCount!: number;
 }
 
 export class CustomerStoreListResponseDto {

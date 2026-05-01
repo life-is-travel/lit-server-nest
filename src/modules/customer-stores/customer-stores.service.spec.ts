@@ -109,6 +109,9 @@ const createCustomerStoreRecord = () => ({
     created_at: new Date('2026-01-01T00:00:00.000Z'),
     updated_at: new Date('2026-01-01T00:00:00.000Z'),
   },
+  _count: {
+    reservations: 12,
+  },
 });
 
 const createService = () => {
@@ -165,6 +168,7 @@ describe('CustomerStoresService', () => {
         storePhotos: ['https://example.com/store.jpg'],
         totalSlots: 20,
       }) as Record<string, unknown>,
+      reservationCount: 12,
     });
   });
 
@@ -198,6 +202,7 @@ describe('CustomerStoresService', () => {
       }),
     );
     expect(result.businessName).toBe('루라운지 혼술바');
+    expect(result.reservationCount).toBe(12);
   });
 
   it('throws NOT_FOUND when store detail does not exist', async () => {
