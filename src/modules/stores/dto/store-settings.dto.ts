@@ -433,8 +433,6 @@ export class StoreSettingsResponseDto {
   @ApiPropertyOptional({ type: StoreNotificationSettingsDto })
   notificationSettings!: Record<string, unknown> | null;
 
-  @ApiProperty({
-    oneOf: [{ type: 'array', items: { type: 'object' } }, { type: 'object' }],
-  })
-  categories!: unknown;
+  @ApiProperty({ type: [Object] })
+  categories!: unknown[];
 }

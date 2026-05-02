@@ -278,9 +278,20 @@ export class StoreSettingsService {
         true,
       categories:
         dto.categories !== undefined
-          ? (dto.categories as Prisma.InputJsonArray)
+          ? this.normalizeCategories(dto.categories)
           : (existingSettings?.categories ?? Prisma.JsonNull),
     };
+  }
+
+  private normalizeCategories(value: unknown): Prisma.InputJsonArray {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter(
+      (item): item is Prisma.InputJsonObject =>
+        item !== null && typeof item === 'object' && !Array.isArray(item),
+    );
   }
 
   private async upsertOperatingHours(
