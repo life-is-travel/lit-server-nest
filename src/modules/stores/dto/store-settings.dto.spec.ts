@@ -53,6 +53,10 @@ describe('UpdateStoreSettingsDto', () => {
         large: { description: '대형', hourlyRate: 4000 },
         special: { description: '특수', hourlyRate: 5000 },
       },
+      categories: [
+        { id: 'wine-bar', name: '와인바', enabled: true },
+        { id: 'luggage-storage', name: '짐보관', enabled: true },
+      ],
     });
 
     expect(errors).toHaveLength(0);

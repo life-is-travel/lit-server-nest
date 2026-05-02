@@ -227,7 +227,7 @@ export class StoreSettingsService {
         true,
       categories:
         dto.categories !== undefined
-          ? dto.categories
+          ? (dto.categories as Prisma.InputJsonArray)
           : (existingSettings?.categories ?? Prisma.JsonNull),
     };
   }

@@ -413,13 +413,11 @@ export class UpdateStoreSettingsDto {
   @Type(() => StoreNotificationSettingsDto)
   notificationSettings?: StoreNotificationSettingsDto;
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: [Object] })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
-  @IsString({ each: true })
-  @MaxLength(100, { each: true })
-  categories?: string[];
+  categories?: unknown[];
 }
 
 export class StoreSettingsResponseDto {
@@ -438,6 +436,6 @@ export class StoreSettingsResponseDto {
   @ApiPropertyOptional({ type: StoreNotificationSettingsDto })
   notificationSettings!: Record<string, unknown> | null;
 
-  @ApiProperty({ type: [String] })
-  categories!: string[];
+  @ApiProperty({ type: [Object] })
+  categories!: unknown[];
 }
