@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { stores_business_type } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import {
+  optionalBoolean,
+  optionalNumber,
+} from '../../../common/transformers/legacy-input.transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -37,6 +42,7 @@ export class RegisterDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   wantsSmsNotification?: boolean;
 
@@ -62,11 +68,13 @@ export class RegisterDto {
 
   @ApiPropertyOptional({ example: 37.529 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsNumber()
   latitude?: number;
 
   @ApiPropertyOptional({ example: 126.968 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsNumber()
   longitude?: number;
 

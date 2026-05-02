@@ -4,6 +4,12 @@ import {
   reservations_requested_storage_type,
   reservations_status,
 } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import {
+  emptyToUndefined,
+  optionalDateString,
+  optionalNumber,
+} from '../../../common/transformers/legacy-input.transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -13,7 +19,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -119,26 +124,31 @@ export class CreateReservationDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEmail()
   @MaxLength(255)
   email?: string;
 
   @ApiProperty()
+  @Transform(optionalDateString)
   @IsDateString()
   startTime!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString()
   endTime?: string;
 
   @ApiProperty()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(24 * 30)
   duration!: number;
 
   @ApiProperty()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -146,6 +156,7 @@ export class CreateReservationDto {
 
   @ApiPropertyOptional({ name: 'price' })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(100_000_000)
@@ -167,7 +178,7 @@ export class CreateReservationDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   luggageImageUrls?: string[];
 
   @ApiPropertyOptional({ default: 'card' })
@@ -178,6 +189,7 @@ export class CreateReservationDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString()
   requestTime?: string;
 
@@ -216,6 +228,7 @@ export class ListStoreReservationsQueryDto {
 
   @ApiPropertyOptional({ example: '2026-04-27' })
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString({ strict: true })
   date?: string;
 
@@ -227,12 +240,14 @@ export class ListStoreReservationsQueryDto {
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   page = 1;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -247,6 +262,7 @@ export class ListCustomerReservationsQueryDto {
 
   @ApiPropertyOptional({ example: '2026-04-27' })
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString({ strict: true })
   date?: string;
 
@@ -258,12 +274,14 @@ export class ListCustomerReservationsQueryDto {
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   page = 1;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -286,7 +304,7 @@ export class StoreCheckinDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   photoUrls?: string[] = [];
 }
 

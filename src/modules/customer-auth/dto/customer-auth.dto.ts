@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { customers_gender, customers_provider_type } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import {
+  emptyToUndefined,
+  optionalBoolean,
+  optionalDateString,
+} from '../../../common/transformers/legacy-input.transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -7,7 +13,6 @@ import {
   IsEnum,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
 } from 'class-validator';
 
@@ -48,6 +53,7 @@ export class CustomerSocialLoginDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEmail()
   @MaxLength(255)
   email?: string;
@@ -60,6 +66,7 @@ export class CustomerSocialLoginDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString()
   birthDate?: string;
 
@@ -76,26 +83,31 @@ export class CustomerSocialLoginDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl()
+  @Transform(emptyToUndefined)
+  @IsString()
   profileImage?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   termsAgreed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   privacyAgreed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   locationAgreed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   marketingAgreed?: boolean;
 }
@@ -138,6 +150,7 @@ export class CustomerSignupDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEmail()
   @MaxLength(255)
   email?: string;
@@ -150,6 +163,7 @@ export class CustomerSignupDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString()
   birthDate?: string;
 
@@ -166,26 +180,31 @@ export class CustomerSignupDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl()
+  @Transform(emptyToUndefined)
+  @IsString()
   profileImage?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   termsAgreed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   privacyAgreed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   locationAgreed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   marketingAgreed?: boolean;
 }
@@ -214,6 +233,7 @@ export class UpdateCustomerMeDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEmail()
   @MaxLength(255)
   email?: string;
@@ -226,28 +246,33 @@ export class UpdateCustomerMeDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl()
+  @Transform(emptyToUndefined)
+  @IsString()
   profileImage?: string;
 }
 
 export class UpdateCustomerNotificationSettingsDto {
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   pushEnabled?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   emailEnabled?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   smsEnabled?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   marketingEnabled?: boolean;
 }

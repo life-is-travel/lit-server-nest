@@ -4,8 +4,13 @@ import {
   coupons_status,
   coupons_type,
 } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
+  optionalBoolean,
+  optionalNumber,
+} from '../../../common/transformers/legacy-input.transformer';
+import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -46,14 +51,14 @@ export class ListCouponsQueryDto {
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   page?: number;
 
   @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -193,7 +198,7 @@ export class CouponPolicyBaseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -201,7 +206,7 @@ export class CouponPolicyBaseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -209,7 +214,7 @@ export class CouponPolicyBaseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -217,7 +222,7 @@ export class CouponPolicyBaseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -245,7 +250,7 @@ export class CouponPolicyBaseDto {
 
   @ApiPropertyOptional({ default: 7, minimum: 1, maximum: 365 })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(365)
@@ -255,6 +260,8 @@ export class CouponPolicyBaseDto {
 export class CreateCouponPolicyDto extends CouponPolicyBaseDto {
   @ApiPropertyOptional({ default: true })
   @IsOptional()
+  @Transform(optionalBoolean)
+  @IsBoolean()
   enabled?: boolean;
 }
 
@@ -272,7 +279,7 @@ export class UpdateCouponPolicyDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -280,7 +287,7 @@ export class UpdateCouponPolicyDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -288,7 +295,7 @@ export class UpdateCouponPolicyDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -296,7 +303,7 @@ export class UpdateCouponPolicyDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -323,7 +330,7 @@ export class UpdateCouponPolicyDto {
 
   @ApiPropertyOptional({ minimum: 1, maximum: 365 })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(365)
@@ -331,6 +338,8 @@ export class UpdateCouponPolicyDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
+  @IsBoolean()
   enabled?: boolean;
 }
 

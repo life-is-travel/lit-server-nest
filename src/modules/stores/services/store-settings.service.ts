@@ -6,6 +6,7 @@ import {
   StoreOperationSettingsDto,
   StoreSettingsResponseDto,
   StoreStorageSettingsDto,
+  StoreStorageSizeDto,
   UpdateStoreSettingsDto,
 } from '../dto/store-settings.dto';
 import { toStoreSettingsResponse } from '../mappers/store-settings.mapper';
@@ -107,10 +108,13 @@ export class StoreSettingsService {
   ) {
     const storage = dto.storageSettings;
     const operation = dto.operationSettings;
+    const refrigeration = (
+      storage as (StoreStorageSettingsDto & { refrigeration?: StoreStorageSizeDto }) | undefined
+    )?.refrigeration;
     const totalSlots =
       storage !== undefined
         ? this.calculateTotalSlots(storage)
-        : operation?.totalSlots;
+        : this.toNumber(operation?.totalSlots);
 
     return {
       store_photos:
@@ -119,110 +123,157 @@ export class StoreSettingsService {
           : (existingSettings?.store_photos ?? Prisma.JsonNull),
       total_slots: totalSlots ?? existingSettings?.total_slots ?? 20,
       daily_rate_threshold:
-        operation?.dailyRateThreshold ??
+        this.toNumber(operation?.dailyRateThreshold) ??
         existingSettings?.daily_rate_threshold ??
         7,
       auto_approval:
-        operation?.autoApproval ?? existingSettings?.auto_approval ?? false,
+        this.toBoolean(operation?.autoApproval) ??
+        existingSettings?.auto_approval ??
+        false,
       auto_overdue_notification:
-        operation?.autoOverdueNotification ??
+        this.toBoolean(operation?.autoOverdueNotification) ??
         existingSettings?.auto_overdue_notification ??
         true,
       s_hourly_rate:
-        storage?.extraSmall?.hourlyRate ??
+        this.toNumber(storage?.extraSmall?.hourlyRate) ??
         existingSettings?.s_hourly_rate ??
         2000,
       s_daily_rate:
-        storage?.extraSmall?.dailyRate ??
+        this.toNumber(storage?.extraSmall?.dailyRate) ??
         existingSettings?.s_daily_rate ??
         15000,
       s_hour_unit:
-        storage?.extraSmall?.hourUnit ?? existingSettings?.s_hour_unit ?? 1,
+        this.toNumber(storage?.extraSmall?.hourUnit) ??
+        existingSettings?.s_hour_unit ??
+        1,
       s_max_capacity:
-        storage?.extraSmall?.maxCapacity ??
+        this.toNumber(storage?.extraSmall?.maxCapacity) ??
         existingSettings?.s_max_capacity ??
         5,
       s_enabled:
-        storage?.isExtraSmallEnabled ?? existingSettings?.s_enabled ?? true,
+        this.toBoolean(storage?.isExtraSmallEnabled) ??
+        existingSettings?.s_enabled ??
+        true,
       m_hourly_rate:
-        storage?.small?.hourlyRate ?? existingSettings?.m_hourly_rate ?? 3000,
+        this.toNumber(storage?.small?.hourlyRate) ??
+        existingSettings?.m_hourly_rate ??
+        3000,
       m_daily_rate:
-        storage?.small?.dailyRate ?? existingSettings?.m_daily_rate ?? 24000,
+        this.toNumber(storage?.small?.dailyRate) ??
+        existingSettings?.m_daily_rate ??
+        24000,
       m_hour_unit:
-        storage?.small?.hourUnit ?? existingSettings?.m_hour_unit ?? 1,
+        this.toNumber(storage?.small?.hourUnit) ??
+        existingSettings?.m_hour_unit ??
+        1,
       m_max_capacity:
-        storage?.small?.maxCapacity ?? existingSettings?.m_max_capacity ?? 8,
-      m_enabled: storage?.isSmallEnabled ?? existingSettings?.m_enabled ?? true,
+        this.toNumber(storage?.small?.maxCapacity) ??
+        existingSettings?.m_max_capacity ??
+        8,
+      m_enabled:
+        this.toBoolean(storage?.isSmallEnabled) ??
+        existingSettings?.m_enabled ??
+        true,
       l_hourly_rate:
-        storage?.medium?.hourlyRate ?? existingSettings?.l_hourly_rate ?? 5000,
+        this.toNumber(storage?.medium?.hourlyRate) ??
+        existingSettings?.l_hourly_rate ??
+        5000,
       l_daily_rate:
-        storage?.medium?.dailyRate ?? existingSettings?.l_daily_rate ?? 40000,
+        this.toNumber(storage?.medium?.dailyRate) ??
+        existingSettings?.l_daily_rate ??
+        40000,
       l_hour_unit:
-        storage?.medium?.hourUnit ?? existingSettings?.l_hour_unit ?? 1,
+        this.toNumber(storage?.medium?.hourUnit) ??
+        existingSettings?.l_hour_unit ??
+        1,
       l_max_capacity:
-        storage?.medium?.maxCapacity ?? existingSettings?.l_max_capacity ?? 3,
+        this.toNumber(storage?.medium?.maxCapacity) ??
+        existingSettings?.l_max_capacity ??
+        3,
       l_enabled:
-        storage?.isMediumEnabled ?? existingSettings?.l_enabled ?? true,
+        this.toBoolean(storage?.isMediumEnabled) ??
+        existingSettings?.l_enabled ??
+        true,
       xl_hourly_rate:
-        storage?.large?.hourlyRate ?? existingSettings?.xl_hourly_rate ?? 7000,
+        this.toNumber(storage?.large?.hourlyRate) ??
+        existingSettings?.xl_hourly_rate ??
+        7000,
       xl_daily_rate:
-        storage?.large?.dailyRate ?? existingSettings?.xl_daily_rate ?? 55000,
+        this.toNumber(storage?.large?.dailyRate) ??
+        existingSettings?.xl_daily_rate ??
+        55000,
       xl_hour_unit:
-        storage?.large?.hourUnit ?? existingSettings?.xl_hour_unit ?? 1,
+        this.toNumber(storage?.large?.hourUnit) ??
+        existingSettings?.xl_hour_unit ??
+        1,
       xl_max_capacity:
-        storage?.large?.maxCapacity ?? existingSettings?.xl_max_capacity ?? 2,
+        this.toNumber(storage?.large?.maxCapacity) ??
+        existingSettings?.xl_max_capacity ??
+        2,
       xl_enabled:
-        storage?.isLargeEnabled ?? existingSettings?.xl_enabled ?? true,
+        this.toBoolean(storage?.isLargeEnabled) ??
+        existingSettings?.xl_enabled ??
+        true,
       special_hourly_rate:
-        storage?.special?.hourlyRate ??
+        this.toNumber(storage?.special?.hourlyRate) ??
         existingSettings?.special_hourly_rate ??
         10000,
       special_daily_rate:
-        storage?.special?.dailyRate ??
+        this.toNumber(storage?.special?.dailyRate) ??
         existingSettings?.special_daily_rate ??
         70000,
       special_hour_unit:
-        storage?.special?.hourUnit ?? existingSettings?.special_hour_unit ?? 1,
+        this.toNumber(storage?.special?.hourUnit) ??
+        existingSettings?.special_hour_unit ??
+        1,
       special_max_capacity:
-        storage?.special?.maxCapacity ??
+        this.toNumber(storage?.special?.maxCapacity) ??
         existingSettings?.special_max_capacity ??
         1,
       special_enabled:
-        storage?.isSpecialEnabled ?? existingSettings?.special_enabled ?? true,
+        this.toBoolean(storage?.isSpecialEnabled) ??
+        existingSettings?.special_enabled ??
+        true,
       refrigeration_enabled:
-        storage?.refrigerationAvailable ??
+        this.toBoolean(storage?.refrigerationAvailable) ??
         existingSettings?.refrigeration_enabled ??
         false,
       refrigeration_hourly_rate:
-        storage?.refrigerationHourlyFee ??
+        this.toNumber(storage?.refrigerationHourlyFee) ??
+        this.toNumber(refrigeration?.hourlyRate) ??
         existingSettings?.refrigeration_hourly_rate ??
         3000,
       refrigeration_daily_rate:
-        storage?.refrigerationDailyFee ??
+        this.toNumber(storage?.refrigerationDailyFee) ??
+        this.toNumber(refrigeration?.dailyRate) ??
         existingSettings?.refrigeration_daily_rate ??
         20000,
       refrigeration_hour_unit:
-        storage?.refrigerationHourUnit ??
+        this.toNumber(storage?.refrigerationHourUnit) ??
+        this.toNumber(refrigeration?.hourUnit) ??
         existingSettings?.refrigeration_hour_unit ??
         1,
       refrigeration_max_capacity:
-        storage?.refrigerationMaxCapacity ??
+        this.toNumber(storage?.refrigerationMaxCapacity) ??
+        this.toNumber(refrigeration?.maxCapacity) ??
         existingSettings?.refrigeration_max_capacity ??
         3,
       new_reservation_notification:
-        dto.notificationSettings?.newReservationNotification ??
+        this.toBoolean(dto.notificationSettings?.newReservationNotification) ??
         existingSettings?.new_reservation_notification ??
         true,
       checkout_reminder_notification:
-        dto.notificationSettings?.checkoutReminderNotification ??
+        this.toBoolean(
+          dto.notificationSettings?.checkoutReminderNotification,
+        ) ??
         existingSettings?.checkout_reminder_notification ??
         true,
       overdue_notification:
-        dto.notificationSettings?.overdueNotification ??
+        this.toBoolean(dto.notificationSettings?.overdueNotification) ??
         existingSettings?.overdue_notification ??
         true,
       system_notification:
-        dto.notificationSettings?.systemNotification ??
+        this.toBoolean(dto.notificationSettings?.systemNotification) ??
         existingSettings?.system_notification ??
         true,
       categories:
@@ -250,58 +301,72 @@ export class StoreSettingsService {
         existing?.monday_close,
       ),
       monday_operating:
-        dailyHours.월?.isOperating ?? existing?.monday_operating ?? true,
+        this.toBoolean(dailyHours.월?.isOperating) ??
+        existing?.monday_operating ??
+        true,
       tuesday_open: this.resolveTime(dailyHours.화, existing?.tuesday_open),
       tuesday_close: this.resolveCloseTime(
         dailyHours.화,
         existing?.tuesday_close,
       ),
       tuesday_operating:
-        dailyHours.화?.isOperating ?? existing?.tuesday_operating ?? true,
+        this.toBoolean(dailyHours.화?.isOperating) ??
+        existing?.tuesday_operating ??
+        true,
       wednesday_open: this.resolveTime(dailyHours.수, existing?.wednesday_open),
       wednesday_close: this.resolveCloseTime(
         dailyHours.수,
         existing?.wednesday_close,
       ),
       wednesday_operating:
-        dailyHours.수?.isOperating ?? existing?.wednesday_operating ?? true,
+        this.toBoolean(dailyHours.수?.isOperating) ??
+        existing?.wednesday_operating ??
+        true,
       thursday_open: this.resolveTime(dailyHours.목, existing?.thursday_open),
       thursday_close: this.resolveCloseTime(
         dailyHours.목,
         existing?.thursday_close,
       ),
       thursday_operating:
-        dailyHours.목?.isOperating ?? existing?.thursday_operating ?? true,
+        this.toBoolean(dailyHours.목?.isOperating) ??
+        existing?.thursday_operating ??
+        true,
       friday_open: this.resolveTime(dailyHours.금, existing?.friday_open),
       friday_close: this.resolveCloseTime(
         dailyHours.금,
         existing?.friday_close,
       ),
       friday_operating:
-        dailyHours.금?.isOperating ?? existing?.friday_operating ?? true,
+        this.toBoolean(dailyHours.금?.isOperating) ??
+        existing?.friday_operating ??
+        true,
       saturday_open: this.resolveTime(dailyHours.토, existing?.saturday_open),
       saturday_close: this.resolveCloseTime(
         dailyHours.토,
         existing?.saturday_close,
       ),
       saturday_operating:
-        dailyHours.토?.isOperating ?? existing?.saturday_operating ?? true,
+        this.toBoolean(dailyHours.토?.isOperating) ??
+        existing?.saturday_operating ??
+        true,
       sunday_open: this.resolveTime(dailyHours.일, existing?.sunday_open),
       sunday_close: this.resolveCloseTime(
         dailyHours.일,
         existing?.sunday_close,
       ),
       sunday_operating:
-        dailyHours.일?.isOperating ?? existing?.sunday_operating ?? false,
+        this.toBoolean(dailyHours.일?.isOperating) ??
+        existing?.sunday_operating ??
+        false,
       holiday_notice:
         operation.holidayNotice?.trim() ?? existing?.holiday_notice ?? null,
       holiday_start_date:
         operation.holidayStartDate !== undefined
-          ? new Date(operation.holidayStartDate)
+          ? this.toDateOrNull(operation.holidayStartDate)
           : (existing?.holiday_start_date ?? null),
       holiday_end_date:
         operation.holidayEndDate !== undefined
-          ? new Date(operation.holidayEndDate)
+          ? this.toDateOrNull(operation.holidayEndDate)
           : (existing?.holiday_end_date ?? null),
       updated_at: now,
     };
@@ -318,16 +383,30 @@ export class StoreSettingsService {
   }
 
   private calculateTotalSlots(storage: StoreStorageSettingsDto): number {
+    const refrigeration = (
+      storage as StoreStorageSettingsDto & { refrigeration?: StoreStorageSizeDto }
+    ).refrigeration;
+
     return (
-      (storage.isExtraSmallEnabled
-        ? (storage.extraSmall?.maxCapacity ?? 0)
+      (this.toBoolean(storage.isExtraSmallEnabled)
+        ? (this.toNumber(storage.extraSmall?.maxCapacity) ?? 0)
         : 0) +
-      (storage.isSmallEnabled ? (storage.small?.maxCapacity ?? 0) : 0) +
-      (storage.isMediumEnabled ? (storage.medium?.maxCapacity ?? 0) : 0) +
-      (storage.isLargeEnabled ? (storage.large?.maxCapacity ?? 0) : 0) +
-      (storage.isSpecialEnabled ? (storage.special?.maxCapacity ?? 0) : 0) +
-      (storage.refrigerationAvailable
-        ? (storage.refrigerationMaxCapacity ?? 0)
+      (this.toBoolean(storage.isSmallEnabled)
+        ? (this.toNumber(storage.small?.maxCapacity) ?? 0)
+        : 0) +
+      (this.toBoolean(storage.isMediumEnabled)
+        ? (this.toNumber(storage.medium?.maxCapacity) ?? 0)
+        : 0) +
+      (this.toBoolean(storage.isLargeEnabled)
+        ? (this.toNumber(storage.large?.maxCapacity) ?? 0)
+        : 0) +
+      (this.toBoolean(storage.isSpecialEnabled)
+        ? (this.toNumber(storage.special?.maxCapacity) ?? 0)
+        : 0) +
+      (this.toBoolean(storage.refrigerationAvailable)
+        ? (this.toNumber(storage.refrigerationMaxCapacity) ??
+          this.toNumber(refrigeration?.maxCapacity) ??
+          0)
         : 0)
     );
   }
@@ -354,8 +433,93 @@ export class StoreSettingsService {
     return fallback ?? null;
   }
 
-  private timeFromString(time: string): Date {
-    return new Date(`1970-01-01T${time}:00.000Z`);
+  private timeFromString(time: unknown): Date | null {
+    const normalized = this.toTimeString(time);
+    return normalized ? new Date(`1970-01-01T${normalized}:00.000Z`) : null;
+  }
+
+  private toNumber(value: unknown): number | undefined {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === 'number') {
+      return Number.isNaN(value) ? undefined : value;
+    }
+
+    const numericValue = Number(value);
+    return Number.isNaN(numericValue) ? undefined : numericValue;
+  }
+
+  private toBoolean(value: unknown): boolean | undefined {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'y'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'n'].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return undefined;
+  }
+
+  private toDateOrNull(value: unknown): Date | null {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private toTimeString(value: unknown): string | null {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString().slice(11, 16);
+    }
+
+    const trimmed = String(value).trim();
+    const strictTime = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const legacyTime = /^(\d|[01]\d|2[0-3]):([0-5]?\d)$/;
+    const timeWithSeconds =
+      /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?$/;
+
+    if (strictTime.test(trimmed)) {
+      return trimmed;
+    }
+
+    const legacyMatch = legacyTime.exec(trimmed);
+    if (legacyMatch) {
+      return `${legacyMatch[1].padStart(2, '0')}:${legacyMatch[2].padStart(2, '0')}`;
+    }
+
+    if (timeWithSeconds.test(trimmed)) {
+      return trimmed.slice(0, 5);
+    }
+
+    const date = new Date(trimmed);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString().slice(11, 16);
+    }
+
+    return null;
   }
 
   private async assertStoreExists(storeId: string): Promise<void> {

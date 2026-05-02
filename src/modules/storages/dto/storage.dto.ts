@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { storages_status, storages_type } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import { optionalNumber } from '../../../common/transformers/legacy-input.transformer';
 import {
   IsEnum,
   IsInt,
@@ -131,6 +133,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000)
@@ -138,6 +141,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000)
@@ -145,6 +149,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000)
@@ -152,6 +157,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(10_000_000)
@@ -159,6 +165,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(-20)
   @Max(200)
@@ -172,6 +179,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(1000)
@@ -179,6 +187,7 @@ export class UpdateStorageDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(0)
   @Max(1000)

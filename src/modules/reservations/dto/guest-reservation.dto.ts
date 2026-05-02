@@ -4,6 +4,12 @@ import {
   reservations_requested_storage_type,
   reservations_status,
 } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import {
+  emptyToUndefined,
+  optionalDateString,
+  optionalNumber,
+} from '../../../common/transformers/legacy-input.transformer';
 import {
   IsDateString,
   IsEmail,
@@ -34,6 +40,7 @@ export class CreateGuestReservationDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEmail()
   @MaxLength(255)
   email?: string;
@@ -42,26 +49,31 @@ export class CreateGuestReservationDto {
     description: '기존 랜딩 serializer 호환 필드입니다.',
   })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEmail()
   @MaxLength(255)
   customerEmail?: string;
 
   @ApiProperty()
+  @Transform(optionalDateString)
   @IsDateString()
   startTime!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalDateString)
   @IsDateString()
   endTime?: string;
 
   @ApiProperty()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(24 * 30)
   duration!: number;
 
   @ApiProperty()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(10)
@@ -146,11 +158,13 @@ export class GuestAvailabilityQueryDto {
   storeId!: string;
 
   @ApiProperty()
+  @Transform(optionalDateString)
   @IsDateString()
   startTime!: string;
 
   @ApiPropertyOptional({ default: 4 })
   @IsOptional()
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(24 * 30)

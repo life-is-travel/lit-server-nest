@@ -92,6 +92,12 @@ export class StoreStorageSyncService {
   private buildStorageConfigs(
     storageSettings: StoreStorageSettingsDto,
   ): StorageConfig[] {
+    const refrigeration = (
+      storageSettings as StoreStorageSettingsDto & {
+        refrigeration?: StoreStorageSizeDto;
+      }
+    ).refrigeration;
+
     return [
       this.buildStorageConfig(
         storages_type.s,
@@ -126,9 +132,15 @@ export class StoreStorageSyncService {
       {
         type: storages_type.refrigeration,
         prefix: 'RF',
-        enabled: storageSettings.refrigerationAvailable ?? false,
-        capacity: storageSettings.refrigerationMaxCapacity ?? 0,
-        hourlyRate: storageSettings.refrigerationHourlyFee ?? 0,
+        enabled: this.toBoolean(storageSettings.refrigerationAvailable) ?? false,
+        capacity:
+          this.toNumber(storageSettings.refrigerationMaxCapacity) ??
+          this.toNumber(refrigeration?.maxCapacity) ??
+          0,
+        hourlyRate:
+          this.toNumber(storageSettings.refrigerationHourlyFee) ??
+          this.toNumber(refrigeration?.hourlyRate) ??
+          0,
       },
     ];
   }
@@ -142,10 +154,45 @@ export class StoreStorageSyncService {
     return {
       type,
       prefix,
-      enabled: enabled ?? false,
-      capacity: size?.maxCapacity ?? 0,
-      hourlyRate: size?.hourlyRate ?? 0,
+      enabled: this.toBoolean(enabled) ?? false,
+      capacity: this.toNumber(size?.maxCapacity) ?? 0,
+      hourlyRate: this.toNumber(size?.hourlyRate) ?? 0,
     };
+  }
+
+  private toNumber(value: unknown): number | undefined {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+
+    const numberValue = Number(value);
+    return Number.isNaN(numberValue) ? undefined : numberValue;
+  }
+
+  private toBoolean(value: unknown): boolean | undefined {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'y'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'n'].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return undefined;
   }
 
   private storageNumber(prefix: string, index: number): string {

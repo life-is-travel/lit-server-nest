@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { stores_business_type } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import {
+  emptyToUndefined,
+  optionalBoolean,
+  optionalNumber,
+} from '../../../common/transformers/legacy-input.transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -7,7 +13,6 @@ import {
   IsLongitude,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
 } from 'class-validator';
 
@@ -96,6 +101,7 @@ export class UpdateStoreProfileDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   wantsSmsNotification?: boolean;
 
@@ -119,11 +125,13 @@ export class UpdateStoreProfileDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsLatitude()
   latitude?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalNumber)
   @IsLongitude()
   longitude?: number;
 
@@ -134,7 +142,8 @@ export class UpdateStoreProfileDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @Transform(emptyToUndefined)
+  @IsString()
   @MaxLength(2000)
   profileImageUrl?: string;
 
@@ -146,6 +155,7 @@ export class UpdateStoreProfileDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(optionalBoolean)
   @IsBoolean()
   hasCompletedSetup?: boolean;
 }

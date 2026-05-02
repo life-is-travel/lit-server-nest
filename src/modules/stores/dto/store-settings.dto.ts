@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsDateString,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -391,26 +392,22 @@ export class StoreNotificationSettingsDto {
 export class UpdateStoreSettingsDto {
   @ApiPropertyOptional({ type: StoreBasicInfoDto })
   @IsOptional()
-  @ValidateNested()
-  @Type(() => StoreBasicInfoDto)
+  @IsObject()
   basicInfo?: StoreBasicInfoDto;
 
   @ApiPropertyOptional({ type: StoreOperationSettingsDto })
   @IsOptional()
-  @ValidateNested()
-  @Type(() => StoreOperationSettingsDto)
+  @IsObject()
   operationSettings?: StoreOperationSettingsDto;
 
   @ApiPropertyOptional({ type: StoreStorageSettingsDto })
   @IsOptional()
-  @ValidateNested()
-  @Type(() => StoreStorageSettingsDto)
+  @IsObject()
   storageSettings?: StoreStorageSettingsDto;
 
   @ApiPropertyOptional({ type: StoreNotificationSettingsDto })
   @IsOptional()
-  @ValidateNested()
-  @Type(() => StoreNotificationSettingsDto)
+  @IsObject()
   notificationSettings?: StoreNotificationSettingsDto;
 
   @ApiPropertyOptional({ type: [Object] })

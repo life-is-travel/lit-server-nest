@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { storages_status, storages_type } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { optionalNumber } from '../../../common/transformers/legacy-input.transformer';
 
 export class ListStoragesQueryDto {
   @ApiPropertyOptional({ enum: storages_status })
@@ -16,14 +17,14 @@ export class ListStoragesQueryDto {
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   page = 1;
 
   @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(optionalNumber)
   @IsInt()
   @Min(1)
   @Max(100)
