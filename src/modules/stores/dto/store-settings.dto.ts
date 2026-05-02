@@ -17,6 +17,7 @@ import {
 } from 'class-validator';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const LEGACY_TIME_PATTERN = /^(\d|[01]\d|2[0-3]):([0-5]?\d)$/;
 const TIME_WITH_SECONDS_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?$/;
 
 const normalizeTimeValue = ({ value }: { value: unknown }): unknown => {
@@ -39,6 +40,11 @@ const normalizeTimeValue = ({ value }: { value: unknown }): unknown => {
 
   if (TIME_PATTERN.test(trimmed)) {
     return trimmed;
+  }
+
+  const legacyTime = LEGACY_TIME_PATTERN.exec(trimmed);
+  if (legacyTime) {
+    return `${legacyTime[1].padStart(2, '0')}:${legacyTime[2].padStart(2, '0')}`;
   }
 
   if (TIME_WITH_SECONDS_PATTERN.test(trimmed)) {
