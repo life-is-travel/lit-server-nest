@@ -52,48 +52,51 @@ export class StoreSettingsService {
   ): Promise<StoreSettingsResponseDto> {
     await this.assertStoreExists(storeId);
 
-    await this.prisma.$transaction(async (tx) => {
-      const existingSettings = await tx.store_settings.findUnique({
-        where: { store_id: storeId },
-      });
+    await this.prisma.$transaction(
+      async (tx) => {
+        const existingSettings = await tx.store_settings.findUnique({
+          where: { store_id: storeId },
+        });
 
-      const settingsData = this.buildSettingsData(dto, existingSettings);
+        const settingsData = this.buildSettingsData(dto, existingSettings);
 
-      await tx.stores.update({
-        where: { id: storeId },
-        data: {
-          has_completed_setup: true,
-          ...(dto.basicInfo?.description !== undefined
-            ? { description: dto.basicInfo.description.trim() }
-            : {}),
-          updated_at: new Date(),
-        },
-      });
+        await tx.stores.update({
+          where: { id: storeId },
+          data: {
+            has_completed_setup: true,
+            ...(dto.basicInfo?.description !== undefined
+              ? { description: dto.basicInfo.description.trim() }
+              : {}),
+            updated_at: new Date(),
+          },
+        });
 
-      await tx.store_settings.upsert({
-        where: { store_id: storeId },
-        create: {
-          store_id: storeId,
-          ...settingsData,
-        },
-        update: {
-          ...settingsData,
-          updated_at: new Date(),
-        },
-      });
+        await tx.store_settings.upsert({
+          where: { store_id: storeId },
+          create: {
+            store_id: storeId,
+            ...settingsData,
+          },
+          update: {
+            ...settingsData,
+            updated_at: new Date(),
+          },
+        });
 
-      if (dto.operationSettings) {
-        await this.upsertOperatingHours(tx, storeId, dto.operationSettings);
-      }
+        if (dto.operationSettings) {
+          await this.upsertOperatingHours(tx, storeId, dto.operationSettings);
+        }
 
-      if (dto.storageSettings) {
-        await this.storageSyncService.syncFromSettings(
-          tx,
-          storeId,
-          dto.storageSettings,
-        );
-      }
-    });
+        if (dto.storageSettings) {
+          await this.storageSyncService.syncFromSettings(
+            tx,
+            storeId,
+            dto.storageSettings,
+          );
+        }
+      },
+      { timeout: 15000 },
+    );
 
     return this.getSettings(storeId);
   }
