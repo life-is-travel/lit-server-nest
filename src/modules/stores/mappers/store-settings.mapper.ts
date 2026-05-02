@@ -52,7 +52,7 @@ export const toStoreSettingsResponse = ({
         systemNotification: settings.system_notification ?? true,
       }
     : null,
-  categories: toJsonValue(settings?.categories),
+  categories: toCategoryArray(settings?.categories),
 });
 
 const toStorageSettings = (settings: StoreSettingsRecord) => ({
@@ -170,6 +170,15 @@ const toStringArray = (
   return value.filter((item): item is string => typeof item === 'string');
 };
 
-const toJsonValue = (
+const toCategoryArray = (
   value: Prisma.JsonValue | null | undefined,
-): Prisma.JsonValue => value ?? [];
+): Prisma.JsonArray => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is Prisma.JsonObject =>
+      item !== null && typeof item === 'object' && !Array.isArray(item),
+  );
+};
