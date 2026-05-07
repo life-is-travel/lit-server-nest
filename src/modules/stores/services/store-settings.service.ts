@@ -61,15 +61,6 @@ export class StoreSettingsService {
 
         const settingsData = this.buildSettingsData(dto, existingSettings);
 
-        console.log(
-          '[StoreSettings] incoming categories:',
-          JSON.stringify(dto.categories),
-        );
-        console.log(
-          '[StoreSettings] normalized categories:',
-          JSON.stringify(settingsData.categories),
-        );
-
         await tx.stores.update({
           where: { id: storeId },
           data: {
@@ -81,7 +72,7 @@ export class StoreSettingsService {
           },
         });
 
-        const savedSettings = await tx.store_settings.upsert({
+        await tx.store_settings.upsert({
           where: { store_id: storeId },
           create: {
             store_id: storeId,
@@ -92,11 +83,6 @@ export class StoreSettingsService {
             updated_at: new Date(),
           },
         });
-
-        console.log(
-          '[StoreSettings] saved categories:',
-          JSON.stringify(savedSettings.categories),
-        );
 
         if (dto.operationSettings) {
           await this.upsertOperatingHours(tx, storeId, dto.operationSettings);

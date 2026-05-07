@@ -414,6 +414,7 @@ export class UpdateStoreSettingsDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
+  @Type(() => Object)
   categories?: unknown[];
 }
 
