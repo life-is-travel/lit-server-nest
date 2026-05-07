@@ -3,10 +3,13 @@ import { validate } from 'class-validator';
 import { UpdateStoreSettingsDto } from './store-settings.dto';
 
 describe('UpdateStoreSettingsDto', () => {
-  const validateDto = (payload: unknown) => {
-    const dto = plainToInstance(UpdateStoreSettingsDto, payload, {
+  const toDto = (payload: unknown) =>
+    plainToInstance(UpdateStoreSettingsDto, payload, {
       enableImplicitConversion: true,
     });
+
+  const validateDto = (payload: unknown) => {
+    const dto = toDto(payload);
 
     return validate(dto, {
       whitelist: true,
@@ -60,5 +63,42 @@ describe('UpdateStoreSettingsDto', () => {
     });
 
     expect(errors).toHaveLength(0);
+  });
+
+  it('preserves category objects during implicit DTO conversion', () => {
+    const dto = toDto({
+      categories: [
+        {
+          id: 'coffee',
+          name: 'COFFEE',
+          items: [
+            {
+              id: 'americano',
+              name: '아아',
+              description: null,
+              price: 4500,
+              imageUrl: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(dto.categories).toEqual([
+      {
+        id: 'coffee',
+        name: 'COFFEE',
+        items: [
+          {
+            id: 'americano',
+            name: '아아',
+            description: null,
+            price: 4500,
+            imageUrl: null,
+          },
+        ],
+      },
+    ]);
+    expect(Array.isArray(dto.categories?.[0])).toBe(false);
   });
 });
