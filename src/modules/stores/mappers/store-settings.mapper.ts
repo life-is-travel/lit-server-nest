@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { FROZEN_STORAGE_PRICES } from '../../reservations/pricing/reservation-pricing.constants';
 import { StoreSettingsResponseDto } from '../dto/store-settings.dto';
 
 type StoreSettingsRecord = NonNullable<
@@ -57,43 +58,48 @@ export const toStoreSettingsResponse = ({
 
 const toStorageSettings = (settings: StoreSettingsRecord) => ({
   extraSmall: {
-    hourlyRate: settings.s_hourly_rate,
-    dailyRate: settings.s_daily_rate,
+    hourlyRate: FROZEN_STORAGE_PRICES.s,
+    dailyRate: FROZEN_STORAGE_PRICES.s,
     hourUnit: settings.s_hour_unit,
     maxCapacity: settings.s_max_capacity,
+    description: '초소형',
   },
   small: {
-    hourlyRate: settings.m_hourly_rate,
-    dailyRate: settings.m_daily_rate,
+    hourlyRate: FROZEN_STORAGE_PRICES.s,
+    dailyRate: FROZEN_STORAGE_PRICES.s,
     hourUnit: settings.m_hour_unit,
     maxCapacity: settings.m_max_capacity,
+    description: '소형',
   },
   medium: {
-    hourlyRate: settings.l_hourly_rate,
-    dailyRate: settings.l_daily_rate,
+    hourlyRate: FROZEN_STORAGE_PRICES.m,
+    dailyRate: FROZEN_STORAGE_PRICES.m,
     hourUnit: settings.l_hour_unit,
     maxCapacity: settings.l_max_capacity,
+    description: '중형',
   },
   large: {
-    hourlyRate: settings.xl_hourly_rate,
-    dailyRate: settings.xl_daily_rate,
+    hourlyRate: FROZEN_STORAGE_PRICES.l,
+    dailyRate: FROZEN_STORAGE_PRICES.l,
     hourUnit: settings.xl_hour_unit,
     maxCapacity: settings.xl_max_capacity,
+    description: '대형',
   },
   special: {
-    hourlyRate: settings.special_hourly_rate,
-    dailyRate: settings.special_daily_rate,
+    hourlyRate: FROZEN_STORAGE_PRICES.l,
+    dailyRate: FROZEN_STORAGE_PRICES.l,
     hourUnit: settings.special_hour_unit,
     maxCapacity: settings.special_max_capacity,
+    description: '특수',
   },
-  isExtraSmallEnabled: settings.s_enabled ?? true,
+  isExtraSmallEnabled: false,
   isSmallEnabled: settings.m_enabled ?? true,
   isMediumEnabled: settings.l_enabled ?? true,
   isLargeEnabled: settings.xl_enabled ?? true,
-  isSpecialEnabled: settings.special_enabled ?? true,
-  refrigerationAvailable: settings.refrigeration_enabled ?? false,
-  refrigerationHourlyFee: settings.refrigeration_hourly_rate,
-  refrigerationDailyFee: settings.refrigeration_daily_rate,
+  isSpecialEnabled: false,
+  refrigerationAvailable: false,
+  refrigerationHourlyFee: FROZEN_STORAGE_PRICES.m,
+  refrigerationDailyFee: FROZEN_STORAGE_PRICES.m,
   refrigerationHourUnit: settings.refrigeration_hour_unit,
   refrigerationMaxCapacity: settings.refrigeration_max_capacity,
 });

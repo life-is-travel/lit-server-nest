@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { ReservationStorageService } from './reservation-storage.service';
 import { GuestReservationService } from './guest-reservation.service';
+import { ReservationPricingService } from '../pricing/reservation-pricing.service';
 
 const createGuestReservationService = () => {
   const tx = {
@@ -51,10 +52,13 @@ const createGuestReservationService = () => {
     prisma as never,
   );
 
+  const reservationPricingService = new ReservationPricingService();
+
   return {
     service: new GuestReservationService(
       prisma as never,
       reservationStorageService,
+      reservationPricingService,
     ),
     prisma,
     tx,
@@ -70,13 +74,13 @@ describe('GuestReservationService', () => {
       business_name: '테스트 매장',
     });
     prisma.store_settings.findUnique.mockResolvedValue({
-      s_max_capacity: 5,
+      m_max_capacity: 5,
     });
     prisma.reservations.aggregate.mockResolvedValue({
       _sum: { bag_count: 1 },
     });
     tx.store_settings.findUnique.mockResolvedValue({
-      s_max_capacity: 5,
+      m_max_capacity: 5,
     });
     tx.reservations.aggregate.mockResolvedValue({
       _sum: { bag_count: 1 },
@@ -98,7 +102,7 @@ describe('GuestReservationService', () => {
       end_time: new Date('2026-04-27T05:00:00.000Z'),
       duration: 4,
       bag_count: 2,
-      total_amount: 12000,
+      total_amount: 9000,
       message: null,
       requested_storage_type: reservations_requested_storage_type.s,
       payment_status: reservations_payment_status.paid,
@@ -131,7 +135,7 @@ describe('GuestReservationService', () => {
         store_id: 'store_1',
         customer_phone: '01012345678',
         customer_email: 'guest@example.com',
-        total_amount: 12000,
+        total_amount: 9000,
         payment_status: reservations_payment_status.paid,
         payment_id: 1n,
       }),

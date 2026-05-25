@@ -39,13 +39,13 @@ describe('StoreStorageSyncService', () => {
     tx.storages.updateMany.mockResolvedValue({ count: 1 });
 
     await service.syncFromSettings(tx as never, 'store_1', {
-      extraSmall: {
-        hourlyRate: 2000,
-        dailyRate: 15000,
+      small: {
+        hourlyRate: 4500,
+        dailyRate: 4500,
         hourUnit: 1,
         maxCapacity: 1,
       },
-      isExtraSmallEnabled: true,
+      isSmallEnabled: true,
     });
 
     expect(tx.storages.updateMany).toHaveBeenCalledWith({

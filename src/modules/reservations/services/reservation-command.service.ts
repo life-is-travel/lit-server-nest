@@ -23,6 +23,10 @@ import {
   StoreCheckinDto,
 } from '../dto/reservation.dto';
 import { toReservationResponse } from '../mappers/reservation.mapper';
+import {
+  normalizeBillingStorageType,
+} from '../pricing/reservation-pricing.constants';
+import { ReservationPricingService } from '../pricing/reservation-pricing.service';
 import { ReservationQueryService } from './reservation-query.service';
 import { ReservationStatusService } from './reservation-status.service';
 import { ReservationStorageService } from './reservation-storage.service';
@@ -37,6 +41,7 @@ export class ReservationCommandService {
     private readonly reservationStatusService: ReservationStatusService,
     private readonly reservationStorageService: ReservationStorageService,
     private readonly couponAutoIssueService: CouponAutoIssueService,
+    private readonly reservationPricingService: ReservationPricingService,
   ) {}
 
   async createStoreReservation(
@@ -65,6 +70,14 @@ export class ReservationCommandService {
       });
     }
 
+    const storageType = normalizeBillingStorageType(dto.storageType);
+    const totalAmount = this.reservationPricingService.calculateTotalAmount({
+      storageType,
+      bagCount: dto.bagCount,
+      startTime,
+      endTime,
+    });
+
     const reservation = await this.prisma.reservations.create({
       data: {
         id: `res_${randomUUID()}`,
@@ -73,14 +86,14 @@ export class ReservationCommandService {
         customer_name: dto.customerName,
         customer_phone: dto.phoneNumber,
         customer_email: dto.email ?? null,
-        requested_storage_type: dto.storageType,
+        requested_storage_type: storageType,
         status: reservations_status.pending,
         start_time: startTime,
         end_time: endTime,
         request_time: dto.requestTime ? new Date(dto.requestTime) : new Date(),
         duration: dto.duration,
         bag_count: dto.bagCount,
-        total_amount: dto.price ?? 0,
+        total_amount: totalAmount,
         message: dto.message ?? null,
         special_requests: dto.specialRequests ?? null,
         luggage_image_urls: dto.luggageImageUrls ?? Prisma.JsonNull,
@@ -121,6 +134,14 @@ export class ReservationCommandService {
       });
     }
 
+    const storageType = normalizeBillingStorageType(dto.storageType);
+    const totalAmount = this.reservationPricingService.calculateTotalAmount({
+      storageType,
+      bagCount: dto.bagCount,
+      startTime,
+      endTime,
+    });
+
     const reservation = await this.prisma.reservations.create({
       data: {
         id: `res_${randomUUID()}`,
@@ -129,14 +150,14 @@ export class ReservationCommandService {
         customer_name: dto.customerName,
         customer_phone: dto.phoneNumber,
         customer_email: dto.email ?? null,
-        requested_storage_type: dto.storageType,
+        requested_storage_type: storageType,
         status: reservations_status.pending,
         start_time: startTime,
         end_time: endTime,
         request_time: dto.requestTime ? new Date(dto.requestTime) : new Date(),
         duration: dto.duration,
         bag_count: dto.bagCount,
-        total_amount: dto.price ?? 0,
+        total_amount: totalAmount,
         message: dto.message ?? null,
         special_requests: dto.specialRequests ?? null,
         luggage_image_urls: dto.luggageImageUrls ?? Prisma.JsonNull,

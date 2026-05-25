@@ -6,6 +6,7 @@ import { GuestReservationsController } from './guest-reservations.controller';
 import { ReservationsController } from './reservations.controller';
 import { GuestReservationService } from './services/guest-reservation.service';
 import { ReservationCommandService } from './services/reservation-command.service';
+import { ReservationPricingService } from './pricing/reservation-pricing.service';
 import { ReservationQueryService } from './services/reservation-query.service';
 import { ReservationStatusService } from './services/reservation-status.service';
 import { ReservationStorageService } from './services/reservation-storage.service';
@@ -19,6 +20,7 @@ import { ReservationStorageService } from './services/reservation-storage.servic
   ],
   providers: [
     GuestReservationService,
+    ReservationPricingService,
     ReservationQueryService,
     ReservationCommandService,
     ReservationStatusService,

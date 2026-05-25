@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { FROZEN_STORAGE_PRICES } from '../../reservations/pricing/reservation-pricing.constants';
 import {
   StoreDayHoursDto,
   StoreOperationSettingsDto,
@@ -108,9 +109,7 @@ export class StoreSettingsService {
   ) {
     const storage = dto.storageSettings;
     const operation = dto.operationSettings;
-    const refrigeration = (
-      storage as (StoreStorageSettingsDto & { refrigeration?: StoreStorageSizeDto }) | undefined
-    )?.refrigeration;
+    const refrigeration = storage?.refrigeration;
     const totalSlots =
       storage !== undefined
         ? this.calculateTotalSlots(storage)
@@ -134,14 +133,8 @@ export class StoreSettingsService {
         this.toBoolean(operation?.autoOverdueNotification) ??
         existingSettings?.auto_overdue_notification ??
         true,
-      s_hourly_rate:
-        this.toNumber(storage?.extraSmall?.hourlyRate) ??
-        existingSettings?.s_hourly_rate ??
-        2000,
-      s_daily_rate:
-        this.toNumber(storage?.extraSmall?.dailyRate) ??
-        existingSettings?.s_daily_rate ??
-        15000,
+      s_hourly_rate: FROZEN_STORAGE_PRICES.s,
+      s_daily_rate: FROZEN_STORAGE_PRICES.s,
       s_hour_unit:
         this.toNumber(storage?.extraSmall?.hourUnit) ??
         existingSettings?.s_hour_unit ??
@@ -149,19 +142,10 @@ export class StoreSettingsService {
       s_max_capacity:
         this.toNumber(storage?.extraSmall?.maxCapacity) ??
         existingSettings?.s_max_capacity ??
-        5,
-      s_enabled:
-        this.toBoolean(storage?.isExtraSmallEnabled) ??
-        existingSettings?.s_enabled ??
-        true,
-      m_hourly_rate:
-        this.toNumber(storage?.small?.hourlyRate) ??
-        existingSettings?.m_hourly_rate ??
-        3000,
-      m_daily_rate:
-        this.toNumber(storage?.small?.dailyRate) ??
-        existingSettings?.m_daily_rate ??
-        24000,
+        0,
+      s_enabled: false,
+      m_hourly_rate: FROZEN_STORAGE_PRICES.s,
+      m_daily_rate: FROZEN_STORAGE_PRICES.s,
       m_hour_unit:
         this.toNumber(storage?.small?.hourUnit) ??
         existingSettings?.m_hour_unit ??
@@ -174,14 +158,8 @@ export class StoreSettingsService {
         this.toBoolean(storage?.isSmallEnabled) ??
         existingSettings?.m_enabled ??
         true,
-      l_hourly_rate:
-        this.toNumber(storage?.medium?.hourlyRate) ??
-        existingSettings?.l_hourly_rate ??
-        5000,
-      l_daily_rate:
-        this.toNumber(storage?.medium?.dailyRate) ??
-        existingSettings?.l_daily_rate ??
-        40000,
+      l_hourly_rate: FROZEN_STORAGE_PRICES.m,
+      l_daily_rate: FROZEN_STORAGE_PRICES.m,
       l_hour_unit:
         this.toNumber(storage?.medium?.hourUnit) ??
         existingSettings?.l_hour_unit ??
@@ -194,14 +172,8 @@ export class StoreSettingsService {
         this.toBoolean(storage?.isMediumEnabled) ??
         existingSettings?.l_enabled ??
         true,
-      xl_hourly_rate:
-        this.toNumber(storage?.large?.hourlyRate) ??
-        existingSettings?.xl_hourly_rate ??
-        7000,
-      xl_daily_rate:
-        this.toNumber(storage?.large?.dailyRate) ??
-        existingSettings?.xl_daily_rate ??
-        55000,
+      xl_hourly_rate: FROZEN_STORAGE_PRICES.l,
+      xl_daily_rate: FROZEN_STORAGE_PRICES.l,
       xl_hour_unit:
         this.toNumber(storage?.large?.hourUnit) ??
         existingSettings?.xl_hour_unit ??
@@ -214,14 +186,8 @@ export class StoreSettingsService {
         this.toBoolean(storage?.isLargeEnabled) ??
         existingSettings?.xl_enabled ??
         true,
-      special_hourly_rate:
-        this.toNumber(storage?.special?.hourlyRate) ??
-        existingSettings?.special_hourly_rate ??
-        10000,
-      special_daily_rate:
-        this.toNumber(storage?.special?.dailyRate) ??
-        existingSettings?.special_daily_rate ??
-        70000,
+      special_hourly_rate: FROZEN_STORAGE_PRICES.l,
+      special_daily_rate: FROZEN_STORAGE_PRICES.l,
       special_hour_unit:
         this.toNumber(storage?.special?.hourUnit) ??
         existingSettings?.special_hour_unit ??
@@ -229,25 +195,11 @@ export class StoreSettingsService {
       special_max_capacity:
         this.toNumber(storage?.special?.maxCapacity) ??
         existingSettings?.special_max_capacity ??
-        1,
-      special_enabled:
-        this.toBoolean(storage?.isSpecialEnabled) ??
-        existingSettings?.special_enabled ??
-        true,
-      refrigeration_enabled:
-        this.toBoolean(storage?.refrigerationAvailable) ??
-        existingSettings?.refrigeration_enabled ??
-        false,
-      refrigeration_hourly_rate:
-        this.toNumber(storage?.refrigerationHourlyFee) ??
-        this.toNumber(refrigeration?.hourlyRate) ??
-        existingSettings?.refrigeration_hourly_rate ??
-        3000,
-      refrigeration_daily_rate:
-        this.toNumber(storage?.refrigerationDailyFee) ??
-        this.toNumber(refrigeration?.dailyRate) ??
-        existingSettings?.refrigeration_daily_rate ??
-        20000,
+        0,
+      special_enabled: false,
+      refrigeration_enabled: false,
+      refrigeration_hourly_rate: FROZEN_STORAGE_PRICES.m,
+      refrigeration_daily_rate: FROZEN_STORAGE_PRICES.m,
       refrigeration_hour_unit:
         this.toNumber(storage?.refrigerationHourUnit) ??
         this.toNumber(refrigeration?.hourUnit) ??
@@ -409,14 +361,7 @@ export class StoreSettingsService {
   }
 
   private calculateTotalSlots(storage: StoreStorageSettingsDto): number {
-    const refrigeration = (
-      storage as StoreStorageSettingsDto & { refrigeration?: StoreStorageSizeDto }
-    ).refrigeration;
-
     return (
-      (this.toBoolean(storage.isExtraSmallEnabled)
-        ? (this.toNumber(storage.extraSmall?.maxCapacity) ?? 0)
-        : 0) +
       (this.toBoolean(storage.isSmallEnabled)
         ? (this.toNumber(storage.small?.maxCapacity) ?? 0)
         : 0) +
@@ -425,14 +370,6 @@ export class StoreSettingsService {
         : 0) +
       (this.toBoolean(storage.isLargeEnabled)
         ? (this.toNumber(storage.large?.maxCapacity) ?? 0)
-        : 0) +
-      (this.toBoolean(storage.isSpecialEnabled)
-        ? (this.toNumber(storage.special?.maxCapacity) ?? 0)
-        : 0) +
-      (this.toBoolean(storage.refrigerationAvailable)
-        ? (this.toNumber(storage.refrigerationMaxCapacity) ??
-          this.toNumber(refrigeration?.maxCapacity) ??
-          0)
         : 0)
     );
   }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, storages_status, storages_type } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { FROZEN_STORAGE_PRICES } from '../../reservations/pricing/reservation-pricing.constants';
 import {
   StoreStorageSettingsDto,
   StoreStorageSizeDto,
@@ -11,7 +12,7 @@ type StorageConfig = {
   prefix: string;
   enabled: boolean;
   capacity: number;
-  hourlyRate: number;
+  pricing: number;
 };
 
 @Injectable()
@@ -50,7 +51,7 @@ export class StoreStorageSyncService {
                 number,
                 type: config.type,
                 status: storages_status.available,
-                pricing: config.hourlyRate,
+                pricing: config.pricing,
               },
             });
           }
@@ -63,7 +64,7 @@ export class StoreStorageSyncService {
             number: { in: [...targetNumbers] },
           },
           data: {
-            pricing: config.hourlyRate,
+            pricing: config.pricing,
             updated_at: new Date(),
           },
         });
@@ -87,61 +88,58 @@ export class StoreStorageSyncService {
         });
       }
     }
+
+    await this.disableLegacyStorageTypes(tx, storeId);
+  }
+
+  private async disableLegacyStorageTypes(
+    tx: Prisma.TransactionClient,
+    storeId: string,
+  ): Promise<void> {
+    await tx.storages.updateMany({
+      where: {
+        store_id: storeId,
+        type: {
+          in: [
+            storages_type.xl,
+            storages_type.special,
+            storages_type.refrigeration,
+          ],
+        },
+        status: storages_status.available,
+      },
+      data: {
+        status: storages_status.maintenance,
+        updated_at: new Date(),
+      },
+    });
   }
 
   private buildStorageConfigs(
     storageSettings: StoreStorageSettingsDto,
   ): StorageConfig[] {
-    const refrigeration = (
-      storageSettings as StoreStorageSettingsDto & {
-        refrigeration?: StoreStorageSizeDto;
-      }
-    ).refrigeration;
-
     return [
       this.buildStorageConfig(
         storages_type.s,
         'S',
-        storageSettings.isExtraSmallEnabled,
-        storageSettings.extraSmall,
+        storageSettings.isSmallEnabled,
+        storageSettings.small,
+        FROZEN_STORAGE_PRICES.s,
       ),
       this.buildStorageConfig(
         storages_type.m,
         'M',
-        storageSettings.isSmallEnabled,
-        storageSettings.small,
+        storageSettings.isMediumEnabled,
+        storageSettings.medium,
+        FROZEN_STORAGE_PRICES.m,
       ),
       this.buildStorageConfig(
         storages_type.l,
         'L',
-        storageSettings.isMediumEnabled,
-        storageSettings.medium,
-      ),
-      this.buildStorageConfig(
-        storages_type.xl,
-        'XL',
         storageSettings.isLargeEnabled,
         storageSettings.large,
+        FROZEN_STORAGE_PRICES.l,
       ),
-      this.buildStorageConfig(
-        storages_type.special,
-        'SP',
-        storageSettings.isSpecialEnabled,
-        storageSettings.special,
-      ),
-      {
-        type: storages_type.refrigeration,
-        prefix: 'RF',
-        enabled: this.toBoolean(storageSettings.refrigerationAvailable) ?? false,
-        capacity:
-          this.toNumber(storageSettings.refrigerationMaxCapacity) ??
-          this.toNumber(refrigeration?.maxCapacity) ??
-          0,
-        hourlyRate:
-          this.toNumber(storageSettings.refrigerationHourlyFee) ??
-          this.toNumber(refrigeration?.hourlyRate) ??
-          0,
-      },
     ];
   }
 
@@ -150,13 +148,14 @@ export class StoreStorageSyncService {
     prefix: string,
     enabled: boolean | undefined,
     size: StoreStorageSizeDto | undefined,
+    pricing: number,
   ): StorageConfig {
     return {
       type,
       prefix,
       enabled: this.toBoolean(enabled) ?? false,
       capacity: this.toNumber(size?.maxCapacity) ?? 0,
-      hourlyRate: this.toNumber(size?.hourlyRate) ?? 0,
+      pricing,
     };
   }
 

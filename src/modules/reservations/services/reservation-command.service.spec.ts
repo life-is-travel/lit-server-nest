@@ -6,6 +6,7 @@ import {
   storages_status,
 } from '@prisma/client';
 import { ReservationCommandService } from './reservation-command.service';
+import { ReservationPricingService } from '../pricing/reservation-pricing.service';
 import { ReservationStatusService } from './reservation-status.service';
 import { ReservationStorageService } from './reservation-storage.service';
 
@@ -42,6 +43,8 @@ const createReservationCommandService = () => {
     issueForTrigger: jest.fn().mockResolvedValue([]),
   };
 
+  const reservationPricingService = new ReservationPricingService();
+
   return {
     service: new ReservationCommandService(
       prisma as never,
@@ -49,6 +52,7 @@ const createReservationCommandService = () => {
       reservationStatusService,
       reservationStorageService,
       couponAutoIssueService as never,
+      reservationPricingService,
     ),
     prisma,
     tx,

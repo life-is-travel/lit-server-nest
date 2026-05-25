@@ -32,14 +32,20 @@ import {
   toGuestReservationResponse,
   toGuestStoreName,
 } from '../mappers/guest-reservation.mapper';
+import {
+  normalizeBillingStorageType,
+} from '../pricing/reservation-pricing.constants';
+import { ReservationPricingService } from '../pricing/reservation-pricing.service';
 import { ReservationStorageService } from './reservation-storage.service';
 
-const ALLOWED_STORAGE_TYPES = Object.values(
-  reservations_requested_storage_type,
-);
-const SHORT_STAY_HOURS = 4;
-const SHORT_STAY_PRICE_PER_BAG = 6000;
-const EXTENDED_STAY_PRICE_PER_BAG = 12000;
+const ALLOWED_STORAGE_TYPES = [
+  reservations_requested_storage_type.s,
+  reservations_requested_storage_type.m,
+  reservations_requested_storage_type.l,
+  reservations_requested_storage_type.xl,
+  reservations_requested_storage_type.special,
+  reservations_requested_storage_type.refrigeration,
+];
 const RESERVATION_TTL_MINUTES = 30;
 const GUEST_CANCEL_STATUSES: reservations_status[] = [
   reservations_status.pending,
@@ -64,15 +70,17 @@ export class GuestReservationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reservationStorageService: ReservationStorageService,
+    private readonly reservationPricingService: ReservationPricingService,
   ) {}
 
   async createReservation(
     dto: CreateGuestReservationDto,
   ): Promise<CreateGuestReservationResponseDto> {
-    const storageType =
+    const storageType = normalizeBillingStorageType(
       dto.storageType ??
-      dto.requestedStorageType ??
-      reservations_requested_storage_type.s;
+        dto.requestedStorageType ??
+        reservations_requested_storage_type.s,
+    );
     const email = dto.email ?? dto.customerEmail ?? null;
     const paymentKey = dto.paymentKey ?? dto.payment_key;
     const orderId = dto.orderId ?? dto.order_id;
@@ -111,7 +119,12 @@ export class GuestReservationService {
     const reservationId = `res_${randomUUID()}`;
     const customerId = `guest_${phoneNumber}_${Date.now()}`;
     const accessToken = this.generateAccessToken();
-    const totalAmount = this.calculateTotalAmount(dto.duration, dto.bagCount);
+    const totalAmount = this.reservationPricingService.calculateTotalAmount({
+      storageType,
+      bagCount: dto.bagCount,
+      startTime,
+      endTime,
+    });
 
     await this.prisma.$transaction(async (tx) => {
       const latestCapacity = await this.checkCapacity(
@@ -409,15 +422,6 @@ export class GuestReservationService {
     return String(phone ?? '').replace(/[-\s]/g, '');
   }
 
-  calculateTotalAmount(duration: number, bagCount: number): number {
-    const pricePerBag =
-      duration <= SHORT_STAY_HOURS
-        ? SHORT_STAY_PRICE_PER_BAG
-        : EXTENDED_STAY_PRICE_PER_BAG;
-
-    return pricePerBag * bagCount;
-  }
-
   private async resolveStore(idOrSlug: string) {
     const store = await this.prisma.stores.findFirst({
       where: {
@@ -485,21 +489,21 @@ export class GuestReservationService {
       return 5;
     }
 
+    const billingType = normalizeBillingStorageType(storageType);
     const capacityMap: Record<
       reservations_requested_storage_type,
       number | null | undefined
     > = {
-      [reservations_requested_storage_type.s]: settings.s_max_capacity,
-      [reservations_requested_storage_type.m]: settings.m_max_capacity,
-      [reservations_requested_storage_type.l]: settings.l_max_capacity,
+      [reservations_requested_storage_type.s]: settings.m_max_capacity,
+      [reservations_requested_storage_type.m]: settings.l_max_capacity,
+      [reservations_requested_storage_type.l]: settings.xl_max_capacity,
       [reservations_requested_storage_type.xl]: settings.xl_max_capacity,
-      [reservations_requested_storage_type.special]:
-        settings.special_max_capacity,
+      [reservations_requested_storage_type.special]: settings.xl_max_capacity,
       [reservations_requested_storage_type.refrigeration]:
-        settings.refrigeration_max_capacity,
+        settings.l_max_capacity,
     };
 
-    return capacityMap[storageType] ?? 5;
+    return capacityMap[billingType] ?? 5;
   }
 
   private async findVerifiedPaymentIfProvided(
