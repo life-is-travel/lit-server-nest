@@ -30,6 +30,8 @@ import {
   GuestReservationListResponseDto,
   GuestReservationResponseDto,
   ListGuestReservationsQueryDto,
+  PatchLuggagePhotosDto,
+  PatchLuggagePhotosResponseDto,
 } from '../dto/guest-reservation.dto';
 import {
   GuestReservationWithStore,
@@ -625,6 +627,75 @@ export class GuestReservationService {
       duration: query.duration,
       items,
     };
+  }
+
+  async saveLuggagePhotos(
+    reservationId: string,
+    dto: PatchLuggagePhotosDto,
+  ): Promise<PatchLuggagePhotosResponseDto> {
+    const reservation = await this.prisma.reservations.findFirst({
+      where: { id: reservationId },
+    });
+
+    if (!reservation) {
+      throw this.reservationNotFound();
+    }
+
+    // 전화번호 또는 이메일 중 하나로 본인 확인
+    const hasPhone = Boolean(dto.customerPhone?.trim());
+    const hasEmail = Boolean(dto.customerEmail?.trim());
+
+    if (!hasPhone && !hasEmail) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: '본인 확인을 위해 customerPhone 또는 customerEmail이 필요합니다.',
+      });
+    }
+
+    const contact = hasEmail
+      ? { email: this.normalizeEmail(dto.customerEmail) }
+      : { phoneNumber: this.normalizePhone(dto.customerPhone) };
+
+    if (!this.matchesGuestContact(reservation, contact)) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: '본인 예약에만 사진을 추가할 수 있습니다.',
+      });
+    }
+
+    // 예약 생성 후 24시간 이내인지 확인
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+    const createdAt = reservation.created_at;
+
+    if (createdAt && Date.now() - createdAt.getTime() > TWENTY_FOUR_HOURS_MS) {
+      throw new BadRequestException({
+        code: 'PHOTO_UPLOAD_WINDOW_EXPIRED',
+        message: '예약 생성 후 24시간 이내에만 짐 사진을 등록할 수 있습니다.',
+      });
+    }
+
+    // 기존 URL과 새 URL 병합 (최대 10개)
+    const MAX_PHOTOS = 10;
+    const existing = Array.isArray(reservation.luggage_image_urls)
+      ? (reservation.luggage_image_urls as string[])
+      : [];
+    const merged = [...existing, ...dto.photoUrls].slice(0, MAX_PHOTOS);
+
+    await this.prisma.reservations.update({
+      where: { id: reservationId },
+      data: {
+        luggage_image_urls: merged,
+        updated_at: new Date(),
+      },
+    });
+
+    this.logger.log({
+      event: 'guest_reservation.luggage_photos_saved',
+      reservationId,
+      count: merged.length,
+    });
+
+    return { id: reservationId, luggageImageUrls: merged };
   }
 
   normalizePhone(phone?: string | null): string {

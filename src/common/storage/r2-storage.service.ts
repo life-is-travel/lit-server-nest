@@ -2,11 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class R2StorageService {
@@ -66,5 +66,36 @@ export class R2StorageService {
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn },
     );
+  }
+
+  /**
+   * 클라이언트가 직접 R2에 파일을 업로드할 수 있는 PUT presigned URL을 발급합니다.
+   * expiresIn 기본값은 5분(300초)입니다.
+   */
+  async getPresignedPutUrl(
+    key: string,
+    contentType: string,
+    expiresIn = 300,
+  ): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ContentType: contentType,
+      }),
+      { expiresIn },
+    );
+  }
+
+  /**
+   * 오브젝트의 퍼블릭 URL을 반환합니다.
+   * CF_R2_PUBLIC_URL이 설정되지 않은 경우 null을 반환합니다.
+   */
+  getPublicUrl(key: string): string | null {
+    if (!this.publicUrl) {
+      return null;
+    }
+    return `${this.publicUrl.replace(/\/$/, '')}/${key}`;
   }
 }

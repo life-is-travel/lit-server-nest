@@ -21,6 +21,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -365,6 +366,48 @@ export class GuestReservationCancelResponseDto {
 
   @ApiPropertyOptional({ description: '함께 취소된 예약 수입니다.' })
   cancelledCount?: number;
+}
+
+export class PatchLuggagePhotosDto {
+  @ApiProperty({
+    description: '업로드 완료된 짐 사진 URL 목록. 최대 10개.',
+    type: [String],
+    example: [
+      'https://r2.example.com/reservations/2026-07/1751234567890-uuid.jpg',
+    ],
+  })
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUrl({}, { each: true })
+  photoUrls!: string[];
+
+  @ApiPropertyOptional({
+    description: '본인 확인용 전화번호. email과 둘 중 하나를 제공해야 합니다.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  customerPhone?: string;
+
+  @ApiPropertyOptional({
+    description: '본인 확인용 이메일. customerPhone과 둘 중 하나를 제공해야 합니다.',
+  })
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsEmail()
+  @MaxLength(255)
+  customerEmail?: string;
+}
+
+export class PatchLuggagePhotosResponseDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty({
+    type: [String],
+    description: '병합 후 저장된 전체 짐 사진 URL 목록.',
+  })
+  luggageImageUrls!: string[];
 }
 
 export class GuestAvailabilityItemDto {

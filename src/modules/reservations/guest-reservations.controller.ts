@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -30,6 +31,8 @@ import {
   GuestReservationListResponseDto,
   GuestReservationResponseDto,
   ListGuestReservationsQueryDto,
+  PatchLuggagePhotosDto,
+  PatchLuggagePhotosResponseDto,
 } from './dto/guest-reservation.dto';
 import { GuestReservationService } from './services/guest-reservation.service';
 
@@ -91,5 +94,21 @@ export class GuestReservationsController {
     @Body() dto: CancelGuestReservationDto,
   ) {
     return this.guestReservationService.cancelReservation(id, dto);
+  }
+
+  @Patch(':id/luggage-photos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '비회원 예약에 짐 사진 URL을 추가합니다.',
+    description:
+      '전화번호 또는 이메일로 본인 확인 후, R2에 업로드된 짐 사진 URL을 예약에 저장합니다. ' +
+      '예약 생성 후 24시간 이내에만 사용할 수 있으며 최대 10개까지 저장됩니다.',
+  })
+  @ApiOkResponse({ type: PatchLuggagePhotosResponseDto })
+  saveLuggagePhotos(
+    @Param('id') id: string,
+    @Body() dto: PatchLuggagePhotosDto,
+  ) {
+    return this.guestReservationService.saveLuggagePhotos(id, dto);
   }
 }
