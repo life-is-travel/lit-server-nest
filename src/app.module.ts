@@ -20,6 +20,7 @@ import { StoresModule } from './modules/stores/stores.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { OwnerActionsModule } from './modules/owner-actions/owner-actions.module';
+import { PushTokensModule } from './modules/push-tokens/push-tokens.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
@@ -56,6 +57,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
     UploadsModule,
     OwnerActionsModule,
     ReviewsModule,
+    PushTokensModule,
   ],
 })
 export class AppModule {}

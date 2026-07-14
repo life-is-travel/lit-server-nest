@@ -73,6 +73,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | F-014 | 피드백 | `*/feedbacks` | Could | 구현완료 |
 | F-015 | 헬스체크 | `health` | Could | 구현완료 |
 | F-016 | QR 토큰 기반 체크인/체크아웃 | `api/reservations` | Must | 구현완료(비활성) |
+| F-017 | 점주 FCM 푸시 토큰 등록 + 새 리뷰 푸시 | `api/store/push-tokens`, `notifications` | Should | 구현완료 |
 
 ---
 
@@ -229,6 +230,17 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ `POST /checkout-by-token` — 토큰으로 예약 조회 후 `completed`로 전이하고 보관함을 해제한다.
 - ✅ 체크아웃 응답에는 고객의 미사용 쿠폰 존재 여부(`hasUnusedCoupon`)가 포함된다.
 - ✅ 토큰 미제공 → 401, 해당 매장에서 예약 미발견 → 404.
+
+### F-017 점주 FCM 푸시 토큰 등록 + 새 리뷰 푸시 (`api/store/push-tokens`, `notifications`)
+**유저 스토리**: 점주로서 lit-store 앱에 새 리뷰가 도착하면 즉시 푸시 알림을 받는다.
+
+- ✅ `POST /api/store/push-tokens` (StoreAuthGuard) — body `{ token, platform('ios'|'android') }`를 토큰(unique) 기준으로 upsert한다. 이미 등록된 토큰이면 `store_id`/`platform`을 갱신한다(기기 재로그인·계정 전환 대응). 201 반환.
+- ✅ `DELETE /api/store/push-tokens` — body `{ token }`. 소유 매장과 무관하게 토큰 일치 시 삭제한다(로그아웃 청소). 200 반환.
+- ✅ 비회원 리뷰 저장 성공 직후, Discord 알림과 **병렬로**(fire-and-forget) 해당 매장의 등록 토큰 전체에 FCM 멀티캐스트 푸시를 보낸다. 어떤 알림 실패도 고객 리뷰 응답에 전파되지 않는다.
+- ✅ 푸시 notification 제목은 `새 리뷰가 도착했어요 ⭐{rating}`, 본문은 `{작성자}: {코멘트 앞 40자}`(코멘트 없으면 `{작성자}님이 별점 {rating}점을 남겼어요`), data 페이로드는 `{ type: 'review_created', reviewId, storeId }`(전부 string)다.
+- ✅ `FIREBASE_SERVICE_ACCOUNT_JSON`(서비스 계정 JSON 또는 base64) 미설정 시 FCM은 조용히 스킵된다(서버 기동·리뷰 생성에 영향 없음).
+- ✅ 발송 응답에서 만료·무효 토큰(`registration-token-not-registered`, `invalid-registration-token`)은 DB에서 삭제(청소)된다.
+- ✅ 리뷰 Discord 웹훅은 `DISCORD_REVIEW_WEBHOOK_URL` 우선, 없으면 `DISCORD_RESERVATION_WEBHOOK_URL`로 폴백한다.
 
 ---
 

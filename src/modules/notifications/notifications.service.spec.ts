@@ -5,6 +5,7 @@ import {
   CreateNotificationData,
   NotificationsService,
 } from './notifications.service';
+import { getFirebaseMessaging } from './firebase-messaging';
 
 const solapiSendMock = jest.fn().mockResolvedValue(undefined);
 jest.mock('solapi', () => ({
@@ -13,6 +14,11 @@ jest.mock('solapi', () => ({
   })),
 }));
 
+jest.mock('./firebase-messaging', () => ({
+  getFirebaseMessaging: jest.fn(),
+}));
+const getFirebaseMessagingMock = getFirebaseMessaging as jest.Mock;
+
 const createService = (config: Record<string, string>) => {
   const configService = {
     get: jest.fn((key: string) => config[key]),
@@ -20,8 +26,18 @@ const createService = (config: Record<string, string>) => {
   const mailService = {
     sendReviewRequestEmail: jest.fn().mockResolvedValue(undefined),
   };
+  const prisma = {
+    owner_push_tokens: {
+      findMany: jest.fn().mockResolvedValue([]),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+  };
 
-  const service = new NotificationsService(configService, mailService as never);
+  const service = new NotificationsService(
+    configService,
+    mailService as never,
+    prisma as never,
+  );
   const errorSpy = jest
     .spyOn(
       (
@@ -33,7 +49,7 @@ const createService = (config: Record<string, string>) => {
     )
     .mockImplementation(() => undefined);
 
-  return { service, mailService, errorSpy };
+  return { service, mailService, prisma, errorSpy };
 };
 
 const cancelData: CancelNotificationData = {
@@ -75,6 +91,7 @@ const checkoutData = {
 describe('NotificationsService', () => {
   beforeEach(() => {
     solapiSendMock.mockClear();
+    getFirebaseMessagingMock.mockReset();
   });
 
   afterEach(() => {
@@ -302,6 +319,152 @@ describe('NotificationsService', () => {
           ),
         }),
       );
+    });
+  });
+
+  describe('sendOwnerReviewPush', () => {
+    const pushData = {
+      storeId: 'store_1',
+      reviewId: 'review_1',
+      storeName: '테스트 매장',
+      customerName: '홍*동',
+      rating: 5,
+      comment: '친절하고 위치도 좋았어요!',
+    };
+
+    it('skips silently when FIREBASE_SERVICE_ACCOUNT_JSON is not configured', async () => {
+      const { service, prisma } = createService({});
+      getFirebaseMessagingMock.mockReturnValue(null);
+
+      await service.sendOwnerReviewPush(pushData);
+
+      expect(prisma.owner_push_tokens.findMany).not.toHaveBeenCalled();
+    });
+
+    it('skips when the store has no registered tokens', async () => {
+      const { service, prisma } = createService({
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+      });
+      const sendMock = jest.fn();
+      getFirebaseMessagingMock.mockReturnValue({
+        sendEachForMulticast: sendMock,
+      });
+      prisma.owner_push_tokens.findMany.mockResolvedValue([]);
+
+      await service.sendOwnerReviewPush(pushData);
+
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('sends a multicast push with the comment preview and string data payload', async () => {
+      const { service, prisma } = createService({
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+      });
+      const sendMock = jest.fn().mockResolvedValue({
+        successCount: 1,
+        failureCount: 0,
+        responses: [{ success: true }],
+      });
+      getFirebaseMessagingMock.mockReturnValue({
+        sendEachForMulticast: sendMock,
+      });
+      prisma.owner_push_tokens.findMany.mockResolvedValue([{ token: 'tok-1' }]);
+
+      await service.sendOwnerReviewPush(pushData);
+
+      expect(sendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tokens: ['tok-1'],
+          notification: {
+            title: '새 리뷰가 도착했어요 ⭐5',
+            body: '홍*동: 친절하고 위치도 좋았어요!',
+          },
+          data: {
+            type: 'review_created',
+            reviewId: 'review_1',
+            storeId: 'store_1',
+          },
+        }),
+      );
+    });
+
+    it('uses a rating-only body when the comment is empty', async () => {
+      const { service, prisma } = createService({
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+      });
+      const sendMock = jest.fn().mockResolvedValue({
+        successCount: 1,
+        failureCount: 0,
+        responses: [{ success: true }],
+      });
+      getFirebaseMessagingMock.mockReturnValue({
+        sendEachForMulticast: sendMock,
+      });
+      prisma.owner_push_tokens.findMany.mockResolvedValue([{ token: 'tok-1' }]);
+
+      await service.sendOwnerReviewPush({ ...pushData, comment: '' });
+
+      expect(sendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notification: expect.objectContaining({
+            body: '홍*동님이 별점 5점을 남겼어요',
+          }),
+        }),
+      );
+    });
+
+    it('cleans up unregistered/invalid tokens from the DB', async () => {
+      const { service, prisma } = createService({
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+      });
+      getFirebaseMessagingMock.mockReturnValue({
+        sendEachForMulticast: jest.fn().mockResolvedValue({
+          successCount: 1,
+          failureCount: 2,
+          responses: [
+            { success: true },
+            {
+              success: false,
+              error: { code: 'messaging/registration-token-not-registered' },
+            },
+            {
+              success: false,
+              error: { code: 'messaging/invalid-registration-token' },
+            },
+          ],
+        }),
+      });
+      prisma.owner_push_tokens.findMany.mockResolvedValue([
+        { token: 'tok-good' },
+        { token: 'tok-stale' },
+        { token: 'tok-bad' },
+      ]);
+
+      await service.sendOwnerReviewPush(pushData);
+
+      expect(prisma.owner_push_tokens.deleteMany).toHaveBeenCalledWith({
+        where: { token: { in: ['tok-stale', 'tok-bad'] } },
+      });
+    });
+
+    it('does not delete tokens for transient (non-token) errors', async () => {
+      const { service, prisma } = createService({
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+      });
+      getFirebaseMessagingMock.mockReturnValue({
+        sendEachForMulticast: jest.fn().mockResolvedValue({
+          successCount: 0,
+          failureCount: 1,
+          responses: [
+            { success: false, error: { code: 'messaging/internal-error' } },
+          ],
+        }),
+      });
+      prisma.owner_push_tokens.findMany.mockResolvedValue([{ token: 'tok-1' }]);
+
+      await service.sendOwnerReviewPush(pushData);
+
+      expect(prisma.owner_push_tokens.deleteMany).not.toHaveBeenCalled();
     });
   });
 });
