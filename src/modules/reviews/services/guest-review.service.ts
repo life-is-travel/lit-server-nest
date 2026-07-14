@@ -140,17 +140,39 @@ export class GuestReviewService {
       throw err;
     }
 
-    // 매장명 조회 후 Discord 알림 (fire-and-forget)
+    // 매장명 조회 후 Discord 알림 + 점주 FCM 푸시 병렬 발송 (fire-and-forget).
+    // 어떤 채널이 실패해도 고객 리뷰 응답에는 전파되지 않는다.
     this.prisma.stores
       .findFirst({ where: { id: reservation.store_id } })
-      .then((store) => {
-        return this.notificationsService.sendReviewCreatedNotification({
-          reviewId: review.id,
-          storeName: store?.business_name ?? '(알 수 없음)',
-          customerName: maskedName,
-          rating,
-          comment,
-          photoUrls: validatedPhotoUrls,
+      .then(async (store) => {
+        const storeName = store?.business_name ?? '(알 수 없음)';
+        const results = await Promise.allSettled([
+          this.notificationsService.sendReviewCreatedNotification({
+            reviewId: review.id,
+            storeName,
+            customerName: maskedName,
+            rating,
+            comment,
+            photoUrls: validatedPhotoUrls,
+          }),
+          this.notificationsService.sendOwnerReviewPush({
+            storeId: reservation.store_id,
+            reviewId: review.id,
+            storeName,
+            customerName: maskedName,
+            rating,
+            comment,
+          }),
+        ]);
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            this.logger.error({
+              event: 'reviews.notification_failed',
+              channel: index === 0 ? 'discord' : 'owner_push',
+              reviewId: review.id,
+              err: result.reason as unknown,
+            });
+          }
         });
       })
       .catch((err: unknown) => {

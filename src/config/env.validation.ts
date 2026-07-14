@@ -65,4 +65,11 @@ export const envValidationSchema = Joi.object({
 
   // 고객 이용완료(체크아웃) 알림톡 템플릿. 미설정 시 알림톡 채널 스킵.
   SOLAPI_KAKAO_CHECKOUT_TEMPLATE_ID: Joi.string().optional(),
+
+  // 리뷰 전용 Discord 웹훅. 미설정 시 DISCORD_RESERVATION_WEBHOOK_URL로 폴백.
+  DISCORD_REVIEW_WEBHOOK_URL: Joi.string().uri().allow('').optional(),
+
+  // 점주(lit-store) 리뷰 도착 FCM 푸시용 서비스 계정 JSON(문자열 또는 base64).
+  // 미설정 시 푸시 채널 스킵.
+  FIREBASE_SERVICE_ACCOUNT_JSON: Joi.string().allow('').optional(),
 });

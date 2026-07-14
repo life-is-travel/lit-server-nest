@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SolapiMessageService } from 'solapi';
+import { PrismaService } from '../../common/database/prisma.service';
 import { MailService } from '../auth/services/mail.service';
 import { createOwnerActionToken } from '../owner-actions/owner-action-token.util';
+import { getFirebaseMessaging } from './firebase-messaging';
 
 export interface CheckoutNotificationData {
   reservationId: string;
@@ -46,6 +48,15 @@ export interface ReviewCreatedNotificationData {
   rating: number;
   comment: string;
   photoUrls: string[];
+}
+
+export interface OwnerReviewPushData {
+  storeId: string;
+  reviewId: string;
+  storeName: string;
+  customerName: string;
+  rating: number;
+  comment: string;
 }
 
 export interface CancelNotificationData {
@@ -265,6 +276,7 @@ export class NotificationsService {
   constructor(
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -918,12 +930,13 @@ export class NotificationsService {
   async sendReviewCreatedNotification(
     data: ReviewCreatedNotificationData,
   ): Promise<void> {
-    const webhookUrl = this.configService.get<string>(
-      'DISCORD_RESERVATION_WEBHOOK_URL',
-    );
+    // 리뷰 전용 웹훅 우선, 없으면 예약 웹훅으로 폴백
+    const webhookUrl =
+      this.configService.get<string>('DISCORD_REVIEW_WEBHOOK_URL') ??
+      this.configService.get<string>('DISCORD_RESERVATION_WEBHOOK_URL');
     if (!webhookUrl) {
       this.logger.debug(
-        'DISCORD_RESERVATION_WEBHOOK_URL 미설정 — 리뷰 Discord 알림 스킵',
+        'DISCORD_REVIEW_WEBHOOK_URL/DISCORD_RESERVATION_WEBHOOK_URL 미설정 — 리뷰 Discord 알림 스킵',
       );
       return;
     }
@@ -967,6 +980,93 @@ export class NotificationsService {
       event: 'notifications.discord_review_sent',
       reviewId: data.reviewId,
     });
+  }
+
+  /**
+   * 새 리뷰 도착 시 점주(lit-store 앱)에게 FCM 푸시를 발송합니다.
+   * FIREBASE_SERVICE_ACCOUNT_JSON 미설정이면 warn 로그 없이 조용히 스킵합니다
+   * (Discord 미설정 패턴과 동일 — 서버 기동/리뷰 생성에 영향 없음).
+   * 만료·무효 토큰은 발송 응답에서 감지해 DB에서 청소합니다.
+   */
+  async sendOwnerReviewPush(data: OwnerReviewPushData): Promise<void> {
+    const messaging = getFirebaseMessaging(
+      this.configService.get<string>('FIREBASE_SERVICE_ACCOUNT_JSON'),
+    );
+    if (!messaging) {
+      this.logger.debug(
+        'FIREBASE_SERVICE_ACCOUNT_JSON 미설정 — 점주 리뷰 푸시 스킵',
+      );
+      return;
+    }
+
+    const tokenRows = await this.prisma.owner_push_tokens.findMany({
+      where: { store_id: data.storeId },
+      select: { token: true },
+    });
+    const tokens = tokenRows.map((row) => row.token);
+    if (tokens.length === 0) {
+      this.logger.debug({
+        event: 'notifications.owner_push_no_tokens',
+        storeId: data.storeId,
+      });
+      return;
+    }
+
+    const trimmed = data.comment.trim();
+    const body = trimmed
+      ? `${data.customerName}: ${trimmed.slice(0, 40)}`
+      : `${data.customerName}님이 별점 ${data.rating}점을 남겼어요`;
+
+    // FCM data 페이로드는 모든 값이 string이어야 함
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title: `새 리뷰가 도착했어요 ⭐${data.rating}`,
+        body,
+      },
+      data: {
+        type: 'review_created',
+        reviewId: data.reviewId,
+        storeId: data.storeId,
+      },
+    });
+
+    // 청소: 만료/무효 토큰 삭제
+    const staleTokens: string[] = [];
+    response.responses.forEach((res, index) => {
+      if (res.success) return;
+      const code = res.error?.code;
+      if (
+        code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token'
+      ) {
+        staleTokens.push(tokens[index]);
+      }
+    });
+    if (staleTokens.length > 0) {
+      await this.prisma.owner_push_tokens.deleteMany({
+        where: { token: { in: staleTokens } },
+      });
+    }
+
+    if (response.failureCount > 0) {
+      this.logger.warn({
+        event: 'notifications.owner_push_failed',
+        storeId: data.storeId,
+        reviewId: data.reviewId,
+        failureCount: response.failureCount,
+        staleRemoved: staleTokens.length,
+      });
+    }
+    if (response.successCount > 0) {
+      this.logger.log({
+        event: 'notifications.owner_push_sent',
+        storeId: data.storeId,
+        reviewId: data.reviewId,
+        sentCount: response.successCount,
+        tokenCount: tokens.length,
+      });
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
