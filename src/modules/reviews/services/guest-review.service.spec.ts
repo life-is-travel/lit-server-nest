@@ -16,6 +16,7 @@ const createService = (config: Record<string, string> = {}) => {
   } as unknown as ConfigService;
   const notificationsService = {
     sendReviewCreatedNotification: jest.fn().mockResolvedValue(undefined),
+    sendOwnerReviewPush: jest.fn().mockResolvedValue(undefined),
   };
   return {
     service: new GuestReviewService(
@@ -72,6 +73,28 @@ describe('GuestReviewService.createReview', () => {
     expect(
       notificationsService.sendReviewCreatedNotification,
     ).toHaveBeenCalled();
+  });
+
+  it('fires the owner FCM push hook in parallel with the Discord notification', async () => {
+    const { service, prisma, notificationsService } = createService();
+    prisma.reservations.findFirst.mockResolvedValue(completedReservation);
+    prisma.reviews.findFirst.mockResolvedValue(null);
+    prisma.reviews.create.mockImplementation(({ data }: never) =>
+      Promise.resolve(data),
+    );
+
+    const result = await service.createReview(validDto);
+
+    expect(notificationsService.sendOwnerReviewPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store_1',
+        reviewId: result.id,
+        storeName: '테스트 매장',
+        customerName: '홍*동',
+        rating: 5,
+        comment: validDto.comment,
+      }),
+    );
   });
 
   it('rejects a wrong token with 401', async () => {
