@@ -882,6 +882,8 @@ enum stores_business_type {
   HOTEL
   SHOP
   BEAUTY_SALON
+  PHARMACY
+  PHOTO_STUDIO
   OTHER
 }
 
