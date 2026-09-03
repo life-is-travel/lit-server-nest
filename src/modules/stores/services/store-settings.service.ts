@@ -120,6 +120,10 @@ export class StoreSettingsService {
         dto.basicInfo?.storePhotos !== undefined
           ? dto.basicInfo.storePhotos
           : (existingSettings?.store_photos ?? Prisma.JsonNull),
+      reservation_wait_photos:
+        dto.basicInfo?.reservationWaitPhotos !== undefined
+          ? dto.basicInfo.reservationWaitPhotos
+          : (existingSettings?.reservation_wait_photos ?? Prisma.JsonNull),
       total_slots: totalSlots ?? existingSettings?.total_slots ?? 20,
       daily_rate_threshold:
         this.toNumber(operation?.dailyRateThreshold) ??

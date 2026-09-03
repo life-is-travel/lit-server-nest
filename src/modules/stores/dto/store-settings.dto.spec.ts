@@ -101,4 +101,33 @@ describe('UpdateStoreSettingsDto', () => {
     ]);
     expect(Array.isArray(dto.categories?.[0])).toBe(false);
   });
+
+  it('accepts reservationWaitPhotos up to 3 URLs in basicInfo', async () => {
+    const errors = await validateDto({
+      basicInfo: {
+        reservationWaitPhotos: [
+          'https://example.com/wait-1.jpg',
+          'https://example.com/wait-2.jpg',
+          'https://example.com/wait-3.jpg',
+        ],
+      },
+    });
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects more than 3 reservationWaitPhotos', async () => {
+    const errors = await validateDto({
+      basicInfo: {
+        reservationWaitPhotos: [
+          'https://example.com/wait-1.jpg',
+          'https://example.com/wait-2.jpg',
+          'https://example.com/wait-3.jpg',
+          'https://example.com/wait-4.jpg',
+        ],
+      },
+    });
+
+    expect(errors.length).toBeGreaterThan(0);
+  });
 });

@@ -28,6 +28,7 @@ export const toStoreSettingsResponse = ({
   storeId,
   basicInfo: {
     storePhotos: toStringArray(settings?.store_photos),
+    reservationWaitPhotos: toStringArray(settings?.reservation_wait_photos),
     description: storeDescription ?? undefined,
   },
   operationSettings: hours
