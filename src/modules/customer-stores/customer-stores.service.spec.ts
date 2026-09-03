@@ -67,6 +67,7 @@ const createCustomerStoreRecord = () => ({
     id: 1,
     store_id: 'store_1',
     store_photos: ['https://example.com/store.jpg'],
+    reservation_wait_photos: ['https://example.com/wait.jpg'],
     total_slots: 20,
     daily_rate_threshold: 7,
     auto_approval: false,
@@ -166,6 +167,7 @@ describe('CustomerStoresService', () => {
       ],
       settings: expect.objectContaining({
         storePhotos: ['https://example.com/store.jpg'],
+        reservationWaitPhotos: ['https://example.com/wait.jpg'],
         totalSlots: 20,
       }) as Record<string, unknown>,
       reservationCount: 12,

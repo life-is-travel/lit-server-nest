@@ -69,6 +69,17 @@ export class StoreBasicInfoDto {
   @IsUrl({ require_protocol: true }, { each: true })
   storePhotos?: string[];
 
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      '예약 승인 대기 화면에 노출할 사진 URL 목록 (최대 3장). 비어 있으면 고객 앱에서 storePhotos로 대체합니다.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3)
+  @IsUrl({ require_protocol: true }, { each: true })
+  reservationWaitPhotos?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

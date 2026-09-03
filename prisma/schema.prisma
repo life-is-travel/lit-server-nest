@@ -551,6 +551,7 @@ model store_settings {
   id                             Int       @id @default(autoincrement())
   store_id                       String    @unique(map: "store_id") @db.VarChar(255)
   store_photos                   Json?
+  reservation_wait_photos        Json?
   total_slots                    Int?      @default(20)
   daily_rate_threshold           Int?      @default(7)
   auto_approval                  Boolean?  @default(false)
