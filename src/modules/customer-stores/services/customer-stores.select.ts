@@ -35,6 +35,14 @@ export const CUSTOMER_STORE_LIST_SELECT = {
   reviews: {
     orderBy: { created_at: 'desc' },
     take: 20,
+    include: {
+      reservations: {
+        select: {
+          customer_phone: true,
+          customer_email: true,
+        },
+      },
+    },
   },
 } satisfies Prisma.storesSelect;
 
@@ -42,6 +50,14 @@ export const CUSTOMER_STORE_DETAIL_SELECT = {
   ...CUSTOMER_STORE_BASE_SELECT,
   reviews: {
     orderBy: { created_at: 'desc' },
+    include: {
+      reservations: {
+        select: {
+          customer_phone: true,
+          customer_email: true,
+        },
+      },
+    },
   },
 } satisfies Prisma.storesSelect;
 

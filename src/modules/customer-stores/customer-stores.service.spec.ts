@@ -17,8 +17,8 @@ const createCustomerStoreRecord = () => ({
       id: 'review_1',
       store_id: 'store_1',
       customer_id: 'customer_1',
-      customer_name: '홍길동',
-      reservation_id: null,
+      customer_name: '홍*동',
+      reservation_id: 'res_1',
       storage_id: null,
       storage_number: null,
       type: 'store',
@@ -30,6 +30,10 @@ const createCustomerStoreRecord = () => ({
       response_date: null,
       created_at: new Date('2026-01-01T00:00:00.000Z'),
       updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      reservations: {
+        customer_phone: '01012345678',
+        customer_email: null,
+      },
     },
   ],
   store_operating_hours: {
@@ -161,7 +165,7 @@ describe('CustomerStoresService', () => {
       reviews: [
         expect.objectContaining({
           storeId: 'store_1',
-          customerName: '홍길동',
+          customerName: '010-****-5678',
         }) as Record<string, unknown>,
       ],
       settings: expect.objectContaining({

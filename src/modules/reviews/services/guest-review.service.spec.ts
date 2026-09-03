@@ -32,7 +32,9 @@ const completedReservation = {
   id: 'res_1',
   store_id: 'store_1',
   customer_id: 'guest_01012345678_1',
-  customer_name: '홍길동',
+  customer_name: 'Guest',
+  customer_phone: '01012345678',
+  customer_email: 'jaerok@gmail.com',
   status: reservations_status.completed,
   actual_end_time: new Date(Date.now() - 24 * 60 * 60 * 1000),
   qr_code: 'guest-token',
@@ -62,16 +64,32 @@ describe('GuestReviewService.createReview', () => {
       data: expect.objectContaining({
         store_id: 'store_1',
         reservation_id: 'res_1',
-        customer_name: '홍*동',
+        customer_name: '010-****-5678',
         rating: 5,
         type: 'store',
         status: 'pending',
       }),
     });
-    expect(result.customerName).toBe('홍*동');
+    expect(result.customerName).toBe('010-****-5678');
     expect(
       notificationsService.sendReviewCreatedNotification,
     ).toHaveBeenCalled();
+  });
+
+  it('stores masked email when the reservation has no phone', async () => {
+    const { service, prisma } = createService();
+    prisma.reservations.findFirst.mockResolvedValue({
+      ...completedReservation,
+      customer_phone: '',
+    });
+    prisma.reviews.findFirst.mockResolvedValue(null);
+    prisma.reviews.create.mockImplementation(({ data }: never) =>
+      Promise.resolve(data),
+    );
+
+    const result = await service.createReview(validDto);
+
+    expect(result.customerName).toBe('ja****@gmail.com');
   });
 
   it('rejects a wrong token with 401', async () => {

@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, reservations_status } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../common/database/prisma.service';
-import { maskCustomerName } from '../../../common/transformers/mask-name.util';
+import { maskReviewAuthorDisplay } from '../../../common/transformers/mask-contact.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import {
   CreateGuestReviewDto,
@@ -100,7 +100,10 @@ export class GuestReviewService {
     const validatedPhotoUrls = this.validatePhotoUrls(photoUrls);
 
     // 리뷰 저장
-    const maskedName = maskCustomerName(reservation.customer_name ?? '');
+    const maskedAuthor = maskReviewAuthorDisplay({
+      phone: reservation.customer_phone,
+      email: reservation.customer_email,
+    });
     let review: GuestReviewResponseDto;
     try {
       const created = await this.prisma.reviews.create({
@@ -109,7 +112,7 @@ export class GuestReviewService {
           store_id: reservation.store_id,
           customer_id: reservation.customer_id ?? '',
           reservation_id: representativeId,
-          customer_name: maskedName,
+          customer_name: maskedAuthor,
           rating,
           service_rating: serviceRating,
           comment,
@@ -147,7 +150,7 @@ export class GuestReviewService {
         return this.notificationsService.sendReviewCreatedNotification({
           reviewId: review.id,
           storeName: store?.business_name ?? '(알 수 없음)',
-          customerName: maskedName,
+          customerName: maskedAuthor,
           rating,
           comment,
           photoUrls: validatedPhotoUrls,
