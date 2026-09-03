@@ -278,14 +278,16 @@ describe('OwnerActionsService', () => {
     expect(result.updatedCount).toBe(2);
   });
 
-  it('getSummary masks the customer name', async () => {
+  it('getSummary exposes customer contact for owner alimtalk link', async () => {
     const { service, prisma } = createService();
     prisma.reservations.findFirst.mockResolvedValue(baseRow);
     prisma.reservations.findMany.mockResolvedValue([baseRow]);
 
     const summary = await service.getSummary('res_1');
 
-    expect(summary.customerName).toBe('홍*동');
+    expect(summary.customerName).toBe('01012345678');
+    expect(summary.phoneNumber).toBe('01012345678');
+    expect(summary.email).toBeNull();
     expect(summary.items).toEqual([{ storageType: 's', bagCount: 2 }]);
   });
 });

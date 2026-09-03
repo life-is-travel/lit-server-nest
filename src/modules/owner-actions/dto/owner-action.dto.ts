@@ -8,8 +8,15 @@ export class OwnerActionItemDto {
 export class OwnerReservationSummaryDto {
   @ApiProperty() id!: string;
   @ApiProperty() status!: string;
-  @ApiProperty({ description: '마스킹된 고객명 (홍*동)' })
+  @ApiProperty({
+    description:
+      '점주 연락용 표시값 — 한국 예약은 전화, 외국 이메일 예약은 메일 (customerName 필드명은 하위 호환)',
+  })
   customerName!: string;
+  @ApiPropertyOptional({ description: '고객 전화번호 (마스킹 없음)' })
+  phoneNumber?: string | null;
+  @ApiPropertyOptional({ description: '고객 이메일 (마스킹 없음)' })
+  email?: string | null;
   @ApiProperty({ type: [OwnerActionItemDto] }) items!: OwnerActionItemDto[];
   @ApiProperty() startTime!: Date;
   @ApiPropertyOptional() endTime!: Date | null;
