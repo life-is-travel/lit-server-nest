@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { maskReviewAuthorDisplay } from '../../../common/transformers/mask-contact.util';
 import { resolveOwnerPhone } from '../../../common/transformers/resolve-owner-phone.util';
 import { CustomerStoreResponseDto } from '../dto/customer-store.dto';
 import {
@@ -6,8 +7,11 @@ import {
   CustomerStoreListRecord,
 } from '../services/customer-stores.select';
 
+type CustomerStoreRecord = CustomerStoreListRecord | CustomerStoreDetailRecord;
+type ReviewRecord = CustomerStoreRecord['reviews'][number];
+
 export const toCustomerStoreResponse = (
-  store: CustomerStoreListRecord | CustomerStoreDetailRecord,
+  store: CustomerStoreRecord,
 ): CustomerStoreResponseDto => ({
   id: store.id,
   slug: store.slug,
@@ -20,7 +24,7 @@ export const toCustomerStoreResponse = (
   latitude: decimalToNumber(store.latitude),
   longitude: decimalToNumber(store.longitude),
   businessType: store.business_type ?? null,
-  reviews: camelize(store.reviews) as Record<string, unknown>[],
+  reviews: store.reviews.map(mapReviewForPublic),
   operatingHours: store.store_operating_hours
     ? (camelize(store.store_operating_hours) as Record<string, unknown>)
     : null,
@@ -29,6 +33,25 @@ export const toCustomerStoreResponse = (
     : null,
   reservationCount: store._count.reservations,
 });
+
+const mapReviewForPublic = (review: ReviewRecord): Record<string, unknown> => {
+  const mapped = camelize(review) as Record<string, unknown>;
+  const reservation = mapped.reservations as
+    | {
+        customerPhone?: string | null;
+        customerEmail?: string | null;
+      }
+    | null
+    | undefined;
+
+  mapped.customerName = maskReviewAuthorDisplay({
+    phone: reservation?.customerPhone,
+    email: reservation?.customerEmail,
+    fallback: mapped.customerName as string,
+  });
+  delete mapped.reservations;
+  return mapped;
+};
 
 const decimalToNumber = (value: Prisma.Decimal | null): number | null => {
   if (!value) {

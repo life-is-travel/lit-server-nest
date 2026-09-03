@@ -32,4 +32,40 @@ describe('toCustomerStoreResponse', () => {
     } as unknown as CustomerStoreDetailRecord;
     expect(toCustomerStoreResponse(record).businessType).toBeNull();
   });
+
+  it('리뷰 customerName을 예약 연락처 기준으로 마스킹한다', () => {
+    const record = {
+      ...baseRecord,
+      reviews: [
+        {
+          id: 'review_1',
+          store_id: 'store-1',
+          customer_id: 'customer_1',
+          customer_name: 'G***t',
+          reservation_id: 'res_1',
+          storage_id: null,
+          storage_number: null,
+          type: 'store',
+          rating: 5,
+          service_rating: null,
+          comment: '좋아요',
+          images: null,
+          status: 'pending',
+          response: null,
+          response_date: null,
+          created_at: new Date('2026-01-01T00:00:00.000Z'),
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+          reservations: {
+            customer_phone: '01098765432',
+            customer_email: 'guest@example.com',
+          },
+        },
+      ],
+    } as unknown as CustomerStoreDetailRecord;
+
+    const result = toCustomerStoreResponse(record);
+
+    expect(result.reviews[0]?.customerName).toBe('010-****-5432');
+    expect(result.reviews[0]).not.toHaveProperty('reservations');
+  });
 });

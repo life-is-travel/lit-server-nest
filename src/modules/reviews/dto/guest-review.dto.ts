@@ -55,7 +55,8 @@ export class CreateGuestReviewDto {
 
 export class GuestReviewResponseDto {
   @ApiProperty() id!: string;
-  @ApiProperty() customerName!: string;
+  @ApiProperty({ description: '마스킹된 연락처 (010-****-5678 또는 ja****@example.com)' })
+  customerName!: string;
   @ApiProperty() rating!: number;
   @ApiPropertyOptional() serviceRating?: number | null;
   @ApiProperty() comment!: string;
