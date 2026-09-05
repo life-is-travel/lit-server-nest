@@ -102,30 +102,17 @@ describe('UpdateStoreSettingsDto', () => {
     expect(Array.isArray(dto.categories?.[0])).toBe(false);
   });
 
-  it('accepts reservationWaitPhotos up to 3 URLs in basicInfo', async () => {
+  it('accepts reservationWaitMenuItemIds up to 3 ids', async () => {
     const errors = await validateDto({
-      basicInfo: {
-        reservationWaitPhotos: [
-          'https://example.com/wait-1.jpg',
-          'https://example.com/wait-2.jpg',
-          'https://example.com/wait-3.jpg',
-        ],
-      },
+      reservationWaitMenuItemIds: ['menu_1', 'menu_2', 'menu_3'],
     });
 
     expect(errors).toHaveLength(0);
   });
 
-  it('rejects more than 3 reservationWaitPhotos', async () => {
+  it('rejects more than 3 reservationWaitMenuItemIds', async () => {
     const errors = await validateDto({
-      basicInfo: {
-        reservationWaitPhotos: [
-          'https://example.com/wait-1.jpg',
-          'https://example.com/wait-2.jpg',
-          'https://example.com/wait-3.jpg',
-          'https://example.com/wait-4.jpg',
-        ],
-      },
+      reservationWaitMenuItemIds: ['a', 'b', 'c', 'd'],
     });
 
     expect(errors.length).toBeGreaterThan(0);

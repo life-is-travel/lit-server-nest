@@ -28,7 +28,6 @@ export const toStoreSettingsResponse = ({
   storeId,
   basicInfo: {
     storePhotos: toStringArray(settings?.store_photos),
-    reservationWaitPhotos: toStringArray(settings?.reservation_wait_photos),
     description: storeDescription ?? undefined,
   },
   operationSettings: hours
@@ -59,6 +58,9 @@ export const toStoreSettingsResponse = ({
       }
     : null,
   categories: toCategoryArray(settings?.categories),
+  reservationWaitMenuItemIds: toStringArray(
+    settings?.reservation_wait_menu_item_ids,
+  ),
 });
 
 /**
