@@ -26,6 +26,8 @@ export const maskReviewAuthorDisplay = (input: {
   fallback?: string | null;
 }): string => {
   const phone = String(input.phone ?? '').trim();
+  // landing 이메일 예약은 customer_phone에도 이메일 주소가 들어간다.
+  if (phone.includes('@')) return maskEmail(phone);
   if (phone) return maskPhone(phone);
 
   const email = String(input.email ?? '').trim();

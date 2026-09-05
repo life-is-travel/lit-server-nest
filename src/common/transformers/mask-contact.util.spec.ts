@@ -38,3 +38,12 @@ describe('mask-contact.util', () => {
     ).toBe('010-****-5678');
   });
 });
+
+  it('masks email when customer_phone duplicates the email address', () => {
+    expect(
+      maskReviewAuthorDisplay({
+        phone: 'traveler@gmail.com',
+        email: 'traveler@gmail.com',
+      }),
+    ).toBe('tr****@gmail.com');
+  });
