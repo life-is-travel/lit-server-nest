@@ -11,7 +11,7 @@ import {
   reservations_status,
 } from '@prisma/client';
 import { PrismaService } from '../../common/database/prisma.service';
-import { maskCustomerName } from '../../common/transformers/mask-name.util';
+import { ownerReservationDisplayLabel } from '../../common/transformers/owner-reservation-display.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReservationStorageService } from '../reservations/services/reservation-storage.service';
 import {
@@ -223,10 +223,20 @@ export class OwnerActionsService {
     representative: reservations,
     members: reservations[],
   ): OwnerReservationSummaryDto {
+    const phone = String(representative.customer_phone ?? '').trim();
+    const email = String(representative.customer_email ?? '').trim();
+    const customerContact = ownerReservationDisplayLabel({
+      customerName: representative.customer_name,
+      phone,
+      email,
+    });
+
     return {
       id: representative.id,
       status: String(representative.status),
-      customerName: maskCustomerName(representative.customer_name),
+      customerName: customerContact,
+      phoneNumber: phone || null,
+      email: email || null,
       items: members.map((member) => ({
         storageType: String(member.requested_storage_type ?? 's'),
         bagCount: member.bag_count,
