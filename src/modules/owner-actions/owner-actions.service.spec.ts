@@ -25,10 +25,19 @@ const createService = () => {
   const notificationsService = {
     notifyCheckoutReview: jest.fn(),
   };
+  // 노쇼 전이는 매장 앱과 공유하는 ReservationNoShowService가 담당한다.
+  const reservationNoShowService = {
+    markNoShow: jest.fn().mockResolvedValue({
+      id: 'res_1',
+      status: reservations_status.no_show,
+      updatedCount: 1,
+    }),
+  };
   const service = new OwnerActionsService(
     prisma as never,
     reservationStorageService as never,
     notificationsService as never,
+    reservationNoShowService as never,
   );
   return {
     service,
@@ -36,6 +45,7 @@ const createService = () => {
     tx,
     reservationStorageService,
     notificationsService,
+    reservationNoShowService,
   };
 };
 
@@ -190,34 +200,28 @@ describe('OwnerActionsService', () => {
     expect(result.status).toBe(reservations_status.completed);
   });
 
-  it('noShow rejects before start_time', async () => {
-    const { service, tx } = createService();
-    const row = {
-      ...baseRow,
-      start_time: new Date(Date.now() + 60 * 60 * 1000),
-    };
-    tx.reservations.findFirst.mockResolvedValue(row);
-    tx.reservations.findMany.mockResolvedValue([row]);
+  // 알림톡 링크와 매장 앱이 같은 전이를 쓰도록, 노쇼는 공통 서비스에 위임한다.
+  // 전이 규칙 자체는 reservation-no-show.service.spec.ts에서 검증한다.
+  it('noShow delegates to the shared no-show service (매장 앱과 동일 경로)', async () => {
+    const { service, reservationNoShowService } = createService();
+
+    const result = await service.noShow('res_1');
+
+    expect(reservationNoShowService.markNoShow).toHaveBeenCalledWith('res_1');
+    expect(result.status).toBe(reservations_status.no_show);
+  });
+
+  it('noShow propagates the shared service rejection (start_time 미경과)', async () => {
+    const { service, reservationNoShowService } = createService();
+    reservationNoShowService.markNoShow.mockRejectedValue(
+      Object.assign(new Error('too early'), {
+        response: { code: 'TOO_EARLY_FOR_NO_SHOW' },
+      }),
+    );
 
     await expect(service.noShow('res_1')).rejects.toMatchObject({
       response: { code: 'TOO_EARLY_FOR_NO_SHOW' },
     });
-  });
-
-  it('noShow marks a past-start confirmed group as no_show and releases storage', async () => {
-    const { service, tx, reservationStorageService } = createService();
-    tx.reservations.findFirst.mockResolvedValue(baseRow);
-    tx.reservations.findMany.mockResolvedValue([baseRow]);
-
-    const result = await service.noShow('res_1');
-
-    expect(tx.reservations.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ status: reservations_status.no_show }),
-      }),
-    );
-    expect(reservationStorageService.releaseStorageIfAny).toHaveBeenCalled();
-    expect(result.status).toBe(reservations_status.no_show);
   });
 
   it('checkOut on an already-completed reservation throws and does not send a review request', async () => {

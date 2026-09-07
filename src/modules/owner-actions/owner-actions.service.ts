@@ -13,6 +13,8 @@ import {
 import { PrismaService } from '../../common/database/prisma.service';
 import { ownerReservationDisplayLabel } from '../../common/transformers/owner-reservation-display.util';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NO_SHOW_FROM_STATUSES } from '../reservations/reservation.constants';
+import { ReservationNoShowService } from '../reservations/services/reservation-no-show.service';
 import { ReservationStorageService } from '../reservations/services/reservation-storage.service';
 import {
   OwnerActionResultDto,
@@ -34,13 +36,6 @@ const CHECK_OUT_FROM: reservations_status[] = [
   reservations_status.confirmed,
   reservations_status.in_progress,
 ];
-// 점주의 물리적 확인(도착/픽업)은 승인 대기 상태보다 우선한다 —
-// NO_AVAILABLE_STORAGE로 pending에 남은 멤버도 함께 전이
-const NO_SHOW_FROM: reservations_status[] = [
-  reservations_status.pending,
-  reservations_status.pending_approval,
-  reservations_status.confirmed,
-];
 
 @Injectable()
 export class OwnerActionsService {
@@ -50,6 +45,7 @@ export class OwnerActionsService {
     private readonly prisma: PrismaService,
     private readonly reservationStorageService: ReservationStorageService,
     private readonly notificationsService: NotificationsService,
+    private readonly reservationNoShowService: ReservationNoShowService,
   ) {}
 
   async getSummary(reservationId: string): Promise<OwnerReservationSummaryDto> {
@@ -104,25 +100,12 @@ export class OwnerActionsService {
     return result;
   }
 
+  /** 매장 앱(`PUT /reservations/{id}/no-show`)과 동일한 전이 경로를 공유한다. */
   async noShow(reservationId: string): Promise<OwnerActionResultDto> {
-    const { result } = await this.transitionInTx(
+    const result = await this.reservationNoShowService.markNoShow(
       reservationId,
-      NO_SHOW_FROM,
-      (representative) => {
-        if (representative.start_time.getTime() > Date.now()) {
-          throw new ConflictException({
-            code: 'TOO_EARLY_FOR_NO_SHOW',
-            message: '보관 시작 시각 이전에는 노쇼 처리할 수 없습니다.',
-          });
-        }
-        return {
-          status: reservations_status.no_show,
-          updated_at: new Date(),
-        };
-      },
-      { releaseStorage: true },
     );
-    return result;
+    return { ...result, status: String(result.status) };
   }
 
   private async transitionInTx(
@@ -245,10 +228,11 @@ export class OwnerActionsService {
       endTime: representative.end_time,
       actualStartTime: representative.actual_start_time,
       actualEndTime: representative.actual_end_time,
-      // 실제 noShow 허용 조건(NO_SHOW_FROM + start_time 경과)과 동일하게 판정
+      // 실제 noShow 허용 조건(NO_SHOW_FROM_STATUSES + start_time 경과)과 동일하게 판정
       canMarkNoShow:
         members.every(
-          (member) => member.status && NO_SHOW_FROM.includes(member.status),
+          (member) =>
+            member.status && NO_SHOW_FROM_STATUSES.includes(member.status),
         ) && representative.start_time.getTime() <= Date.now(),
       locale: representative.locale ?? 'ko',
       // 짐 사진/메모는 그룹 대표 행에 저장됨 (예약 생성 시 index 0)
