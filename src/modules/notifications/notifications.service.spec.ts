@@ -123,6 +123,9 @@ describe('NotificationsService', () => {
     const ownerCall = (solapiSendMock.mock.calls as [SolapiSendArg][]).find(
       (call) => call[0]?.kakaoOptions?.templateId === 'tmpl',
     );
+    expect(ownerCall?.[0].kakaoOptions?.variables?.['#{store_name}']).toBe(
+      '테스트 매장',
+    );
     expect(ownerCall?.[0].kakaoOptions?.variables?.['#{action_url}']).toMatch(
       /^www\.lifeistravel\.io\/o\/res_abc\?t=[A-Za-z0-9_-]+$/,
     );

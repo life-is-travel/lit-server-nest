@@ -649,6 +649,7 @@ export class NotificationsService {
             pfId,
             templateId,
             variables: {
+              '#{store_name}': data.storeName,
               '#{reservation_code}': code,
               '#{customer_contact}': data.customerPhone,
               '#{luggage_list}': luggageList,
