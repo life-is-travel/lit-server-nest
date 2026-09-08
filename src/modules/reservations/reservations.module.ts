@@ -9,6 +9,7 @@ import { GuestReservationService } from './services/guest-reservation.service';
 import { LuggagePhotoService } from './services/luggage-photo.service';
 import { QrCheckinService } from './services/qr-checkin.service';
 import { ReservationCommandService } from './services/reservation-command.service';
+import { ReservationNoShowService } from './services/reservation-no-show.service';
 import { ReservationPricingService } from './pricing/reservation-pricing.service';
 import { ReservationQueryService } from './services/reservation-query.service';
 import { ReservationStatusService } from './services/reservation-status.service';
@@ -29,10 +30,11 @@ import { ReservationAutoCompleteService } from './services/reservation-auto-comp
     ReservationPricingService,
     ReservationQueryService,
     ReservationCommandService,
+    ReservationNoShowService,
     ReservationStatusService,
     ReservationStorageService,
     ReservationAutoCompleteService,
   ],
-  exports: [ReservationStorageService],
+  exports: [ReservationNoShowService, ReservationStorageService],
 })
 export class ReservationsModule {}

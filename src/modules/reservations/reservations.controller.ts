@@ -33,6 +33,7 @@ import {
 // import { QrCheckinDto, QrCheckinResponseDto, QrCheckoutDto, QrCheckoutResponseDto } from './dto/qr-checkin.dto';
 import { QrCheckinService } from './services/qr-checkin.service';
 import { ReservationCommandService } from './services/reservation-command.service';
+import { ReservationNoShowService } from './services/reservation-no-show.service';
 import { ReservationQueryService } from './services/reservation-query.service';
 
 @ApiTags('Reservations')
@@ -43,6 +44,7 @@ export class ReservationsController {
   constructor(
     private readonly reservationQueryService: ReservationQueryService,
     private readonly reservationCommandService: ReservationCommandService,
+    private readonly reservationNoShowService: ReservationNoShowService,
     private readonly qrCheckinService: QrCheckinService,
   ) {}
 
@@ -134,6 +136,21 @@ export class ReservationsController {
     @Body() dto: StoreCheckinDto,
   ) {
     return this.reservationCommandService.storeCheckin(storeId, id, dto);
+  }
+
+  @Put(':id/no-show')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '매장 예약을 노쇼 처리합니다 (보관 시작 시각 경과 후에만).',
+  })
+  @ApiOkResponse({ type: ReservationStatusResponseDto })
+  async markNoShow(
+    @CurrentStoreId() storeId: string,
+    @Param('id') id: string,
+  ): Promise<ReservationStatusResponseDto> {
+    const { id: reservationId, status } =
+      await this.reservationNoShowService.markNoShow(id, { storeId });
+    return { id: reservationId, status };
   }
 
   @Put(':id/luggage-owner-memo')
