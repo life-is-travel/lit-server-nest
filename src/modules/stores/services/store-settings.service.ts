@@ -241,6 +241,38 @@ export class StoreSettingsService {
     };
   }
 
+  /** imageUrls가 있으면 대표 imageUrl을 맞추고, 예전 한 장만 있으면 배열로 올린다. */
+  private normalizeMenuCategoryImages(
+    category: Record<string, unknown>,
+  ): Prisma.InputJsonObject {
+    const items = Array.isArray(category.items)
+      ? category.items.map((raw) => this.normalizeMenuItemImages(raw))
+      : category.items;
+    return { ...category, items } as Prisma.InputJsonObject;
+  }
+
+  private normalizeMenuItemImages(raw: unknown): unknown {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return raw;
+    }
+    const item = raw as Record<string, unknown>;
+    const fromList = Array.isArray(item.imageUrls)
+      ? item.imageUrls
+          .filter((url): url is string => typeof url === 'string' && url.trim() !== '')
+          .map((url) => url.trim())
+      : [];
+    const single =
+      typeof item.imageUrl === 'string' && item.imageUrl.trim() !== ''
+        ? item.imageUrl.trim()
+        : '';
+    const imageUrls = fromList.length > 0 ? fromList : single ? [single] : [];
+    return {
+      ...item,
+      imageUrls,
+      imageUrl: imageUrls[0] ?? null,
+    };
+  }
+
   private normalizeCategories(value: unknown): Prisma.InputJsonArray {
     const categories: Prisma.InputJsonObject[] = [];
     this.collectCategoryObjects(value, categories);
@@ -262,7 +294,7 @@ export class StoreSettingsService {
       }
 
       if (item !== null && typeof item === 'object') {
-        categories.push(item as Prisma.InputJsonObject);
+        categories.push(this.normalizeMenuCategoryImages(item as Record<string, unknown>));
       }
     }
   }

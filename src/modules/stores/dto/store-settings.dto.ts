@@ -451,7 +451,11 @@ export class StoreSettingsResponseDto {
   @ApiPropertyOptional({ type: StoreNotificationSettingsDto })
   notificationSettings!: Record<string, unknown> | null;
 
-  @ApiProperty({ type: [Object] })
+  @ApiProperty({
+    type: [Object],
+    description:
+      '메뉴 카테고리. items[].imageUrl은 대표 1장, imageUrls는 상품 사진 전체(하위 호환).',
+  })
   categories!: unknown[];
 
   @ApiPropertyOptional({
