@@ -1,7 +1,7 @@
 # PRD — lit-server-nest (Life Is Travel 짐 보관 예약 플랫폼 백엔드)
 
 > 문서 유형: **현행(as-is) 구현 PRD** · 독자: 개발팀/QA(기술 명세 + 회귀 검증 기준)
-> 기준 코드: branch `feat/multi-type-reservation` (커밋 `e05d32e`)
+> 기준 코드: `main` (커밋 `f0618d9`, 2026-10-02)
 > 관점: 이미 구현된 동작을 기준으로 작성한다. **Must = 구현 완료 기능**, **수용 기준 = 현재
 > 실제 동작(QA 회귀 테스트 기준)**, **이번 버전 제외 범위 = DB·스키마만 존재하고 로직이 없는 영역**.
 > 성공 지표의 목표 수치는 `(제안/TBD)`로 표기 — 코드에 없는 제안값임을 의미한다.
@@ -28,9 +28,9 @@ DB 스키마만 존재한다. 이 PRD는 현재 구현을 정확히 문서화하
 
 | 액터 | 인증 | 핵심 권한 |
 |------|------|-----------|
-| **점주(Store)** | JWT(이메일+비밀번호, 이메일 인증코드) | 매장/보관함/설정/PIN, 예약 승인·거절·체크인, 쿠폰 정책, 대시보드 |
+| **점주(Store)** | JWT(이메일+비밀번호, 이메일 인증코드) · 알림톡 액션 링크(HMAC 토큰, F-021) | 매장/보관함/설정/PIN, 예약 승인·거절·체크인·체크아웃·노쇼, 쿠폰 정책, 대시보드, 리뷰 답글·통계, 짐 사진 메모 |
 | **로그인 고객(Customer)** | JWT(소셜: kakao 구현, naver/apple 스키마만) | 예약 생성·조회·체크아웃, 쿠폰 신청·사용, 프로필/알림 설정 |
-| **비회원(Guest)** | 무인증 + 전화번호/토큰 검증, Throttle | 예약 생성·조회·취소, 쿠폰 조회·사용 |
+| **비회원(Guest)** | 무인증 + 전화번호/토큰 검증, Throttle | 예약 생성·조회·취소, 쿠폰 조회·사용, 짐 사진 등록, 리뷰 작성(리뷰 요청 링크 토큰) |
 | **관리자(Admin)** | 관리자 JWT(이메일+비밀번호, 가입 API 없음·CLI로 생성, F-019) | 피드백 조회·응답(F-014), 매장 운영 현황 조회(F-018) |
 
 ### 1.4 성공 지표 (제안)
@@ -78,6 +78,10 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | F-017 | 노쇼 처리 | `api/reservations`, `api/owner-actions` | Must | 구현완료(PR #90) |
 | F-018 | 관리자 매장 운영 현황 조회 | `api/admin/stores` | Should | 구현완료(PR #98~#101) |
 | F-019 | 관리자 인증·계정 | `api/admin/auth` | Must | 구현완료(PR #96) |
+| F-020 | 예약 알림 발송(알림톡·SMS·Discord·이메일) | `notifications`(라우트 없음) | Must | 구현완료 |
+| F-021 | 점주 알림톡 액션 링크(요약·체크인·체크아웃·노쇼) | `api/owner-actions/reservations` | Must | 구현완료 |
+| F-022 | 리뷰(비회원 작성·점주 답글·통계) | `api/guest/reviews`, `api/reviews` | Should | 구현완료 |
+| F-023 | 사진 업로드(R2 프리사인)·짐 사진 | `*/uploads/presign`, `api/guest/reservations/*luggage-photos` | Should | 구현완료 |
 
 ---
 
@@ -311,6 +315,54 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ `api/admin/auth/*`에는 점주 인증과 같은 레이트리밋(`AUTH_RATE_LIMIT_*`, 15분/5회, 이메일 또는 IP 기준)이 적용된다.
 - ✅ 기존 `X-Admin-Token`·`ADMIN_FEEDBACK_TOKEN`·`AdminFeedbackTokenGuard`는 제거되었으며, 피드백 어드민 API(F-014)도 관리자 JWT로만 동작한다.
 
+### F-020 예약 알림 발송 (`notifications`, 시스템)
+**유저 스토리**: 시스템으로서 점주와 고객에게 예약 상태를 알리기 위해 알림톡·SMS·Discord·이메일을 발송한다.
+
+- ✅ 발송 트리거는 네 가지다. 비회원 예약 생성(`POST /api/guest/reservations`) → Discord + 점주 알림톡 + 고객 알림, 비회원 취소(`PUT /api/guest/reservations/:id/cancel`) → Discord + 점주 취소 알림톡, 점주 확인 체크아웃(F-021 체크아웃 또는 `PUT /api/reservations/:id/status`로 `completed` 전이) → 고객 리뷰 요청, 리뷰 작성(F-022)·짐 사진 등록(F-023) → Discord.
+- ✅ 점주·고객 예약 API로 생성한 예약과 자동 완료 크론(6시간 유예)으로 `completed`가 된 예약에는 알림이 발송되지 않는다.
+- ✅ 모든 발송은 fire-and-forget이다. Solapi·Discord·SMTP 장애는 로그(`notifications.channel_failed`)만 남기고 예약 생성·취소·체크아웃·리뷰 작성의 응답을 바꾸지 않는다. 재시도·재발송·전송 결과 저장은 없다.
+- ✅ 점주 수신자는 `notification_phone`(비어 있으면 `phone_number`)과 `notification_phones`(JSON 배열)이며, Solapi 형식으로 정규화(`+82` → `0`)한 뒤 중복을 제거하고 9자리 미만은 버린다. 유효 수신자가 없으면 발송을 건너뛰고, 수신자 하나의 실패가 다른 수신자를 막지 않는다.
+- ✅ 점주 예약 생성 알림톡 변수는 `store_name, reservation_code, customer_contact, luggage_list, start_time, end_time, amount, customer_language, action_url`이며 `action_url`은 F-021 점주 액션 링크다. 총액이 0 이하이면 `amount`는 `현장결제`다. 취소 알림톡 변수는 `reservation_code, customer_contact, luggage_list, start_time, cancel_time`이다.
+- ✅ 고객 알림 채널은 연락처로 결정된다. 연락처가 이메일(`@` 포함)이면 생성 알림을 보내지 않고, 한국 번호 + `locale=ko`면 알림톡(실패 시 LMS 폴백), 그 외는 로케일별(`ko/en/ja/zh`) LMS를 보낸다. 리뷰 요청은 이메일 연락처면 이메일, 한국 번호 + `ko`면 알림톡(실패 시 LMS), 그 외에는 이메일이 있으면 이메일, 없으면 LMS다.
+- ✅ 리뷰 요청 링크는 `www.lifeistravel.io[/locale]/review/{id}?token={qr_code}`이며 예약에 `qr_code`가 없으면 발송을 건너뛴다.
+- ✅ 채널별 환경변수(`SOLAPI_*`, `DISCORD_RESERVATION_WEBHOOK_URL`, `EMAIL_*`)가 없으면 해당 채널만 건너뛰며 부팅은 실패하지 않는다. 알림톡 템플릿은 점주 생성·점주 취소·고객 생성·고객 리뷰 요청 4종이다.
+- ✅ `notifications` 테이블에는 쓰지 않는다. 대시보드 `unreadNotifications`는 이 테이블의 `is_read=false` 건수이지만 코드가 행을 생성하지 않으므로 외부 입력이 없는 한 0이다.
+
+### F-021 점주 알림톡 액션 링크 (`api/owner-actions/reservations`, 점주)
+**유저 스토리**: 점주로서 매장 앱 로그인 없이 알림톡의 링크만으로 예약을 확인하고 체크인·체크아웃·노쇼를 처리한다.
+
+- ✅ 링크는 `www.lifeistravel.io/o/{reservationId}?t={token}`이며 `token`은 `OWNER_ACTION_SECRET`으로 예약 id를 HMAC-SHA256(base64url) 서명한 값이다. 만료·폐기가 없고 시크릿 교체로만 무효화된다. 예약 A의 토큰은 예약 B에 쓸 수 없다.
+- ✅ `OWNER_ACTION_SECRET` 미설정 시 모든 액션 라우트가 401로 잠긴다(fail-closed). 토큰 누락·불일치 → 401 `UNAUTHORIZED`.
+- ✅ `GET /:id` 요약은 대표 예약 기준 상태·시각·타입별 짐 목록·`canMarkNoShow`·`locale`·짐 사진·고객/점주 메모를 반환한다. `customerName`은 실명이 아니라 연락처 표시값(이메일 예약이면 이메일)이며 전화·이메일은 마스킹하지 않는다.
+- ✅ `POST /:id/check-in` — `pending/pending_approval/confirmed`에서 `in_progress`로 전이하고 `actual_start_time`을 기록한다. `payment_status`가 `pending`이면 현장결제 수령으로 보고 `paid`로 바꾼다.
+- ✅ `POST /:id/check-out` — `pending/pending_approval/confirmed/in_progress`에서 `completed`로 전이하고 `actual_end_time`을 기록하며 보관함을 반납한다. 결제 상태 전환은 체크인과 같고, 성공 시 고객 리뷰 요청 알림(F-020)을 보낸다.
+- ✅ `POST /:id/no-show` — F-017과 같은 규칙이며 매장 소유권 검증 대신 토큰으로 예약을 식별한다.
+- ✅ 전이는 그룹 멤버 전체에 한 트랜잭션으로 적용되며, 허용 상태가 아닌 멤버가 있거나 경합으로 갱신 행 수가 모자라면 409 `INVALID_TRANSITION`으로 전체를 거부한다. 예약 미존재 → 404 `RESERVATION_NOT_FOUND`.
+- ✅ 액션 응답은 `{ id, status, updatedCount }`이며 레이트리밋은 IP당 30 req/min이다.
+
+### F-022 리뷰 (`api/guest/reviews`, `api/reviews`)
+**유저 스토리**: 손님으로서 이용 후 매장을 평가하고, 점주로서 리뷰를 확인하고 답글을 단다.
+
+- ✅ `POST /api/guest/reviews` — `reservationId`와 리뷰 요청 링크의 `token`(예약 `qr_code`)으로 본인을 확인한다. 토큰 불일치 → 401, 예약 미존재 → 404.
+- ✅ 작성 조건은 `status=completed`이고 `actual_end_time`이 있는 예약(자동 완료 건 제외)이며 아니면 409 `REVIEW_NOT_ELIGIBLE`. `actual_end_time`으로부터 14일 초과 → 410 `REVIEW_WINDOW_EXPIRED`.
+- ✅ 리뷰는 예약 그룹당 1건이다(대표 예약 id 기준, DB 유니크). 중복 → 409 `REVIEW_ALREADY_EXISTS`.
+- ✅ `rating`은 1~5 필수, `serviceRating`은 1~5 선택, `comment`는 선택(최대 1000자, 별점만 제출 가능), `photoUrls`는 최대 3개이며 `CF_R2_PUBLIC_URL` 아래의 URL만 허용한다(아니면 400 `INVALID_PHOTO_URL`).
+- ✅ 작성자 표시는 저장 시점에 마스킹된다(`010-****-5678`, `ja****@gmail.com`). 원본 연락처는 `reviews`에 저장되지 않는다. 작성 시 Discord 알림(F-020)이 발송된다.
+- ✅ 점주는 `GET /api/reviews`(페이지네이션, `filterStatus=all|responded|pending`, `type`), `GET /api/reviews/statistics`(평균 별점·총/답글/미답글 수·별점 분포), `POST /api/reviews/:id/response`(답글 최대 1000자, `status → responded`)를 사용한다. 다른 매장 리뷰 → 404 `REVIEW_NOT_FOUND`. 답글은 덮어쓸 수 있다.
+- ✅ 리뷰 상태는 `pending/responded` 두 가지다. 대시보드 `customerSatisfaction`은 이 리뷰의 평균 별점·건수·답글률이다.
+- ✅ 비회원 리뷰 작성은 IP당 5 req/min으로 제한된다.
+
+### F-023 사진 업로드·짐 사진 (`api/uploads`, `api/guest/uploads`, `api/customer/uploads`, `api/guest/reservations/*luggage-photos`)
+**유저 스토리**: 사용자로서 매장·예약·리뷰 사진을 올리기 위해 R2 업로드 URL을 받고, 손님으로서 맡길 짐의 사진을 예약에 남긴다.
+
+- ✅ `POST /api/uploads/presign`(점주 JWT), `POST /api/customer/uploads/presign`(고객 JWT), `POST /api/guest/uploads/presign`(무인증, IP당 15 req/min)이 Cloudflare R2 PUT 프리사인 URL(5분 유효)을 발급한다. 응답은 `{ uploadUrl, objectKey, publicUrl? }`이며 `publicUrl`은 `CF_R2_PUBLIC_URL` 설정 시에만 포함된다.
+- ✅ `contentType`은 `image/jpeg|png|webp`만 허용하고 확장자는 `contentType`에서 결정된다. `folder`는 `stores/|reservations/|reviews/`(비회원은 `reservations/|reviews/`)로 시작해야 한다. 객체 키는 `{folder}/{timestamp}-{uuid}.{ext}`이며 프리사인 경로에는 파일 크기 제한이 없다.
+- ✅ `POST /api/guest/reservations/luggage-photos` — 예약 전 multipart 업로드. `uploadToken`(8~64자 영숫자·`_`·`-`) 필수, 파일 최대 3개·각 4MB·jpeg/png/webp, 키는 `guest-luggage/{uploadToken}/{uuid}.{ext}`. 30일 폐기는 R2 라이프사이클 규칙이 담당한다.
+- ✅ 예약 생성 시 `luggageImageUrls`(최대 3)·`uploadToken`·`luggageCustomerMemo`(최대 500자)는 그룹 대표 행에만 저장된다.
+- ✅ `PATCH /api/guest/reservations/:id/luggage-photos` — `customerPhone` 또는 `customerEmail`로 본인을 확인하고(불일치 403), 예약 생성 후 24시간 이내에만 허용하며(400 `PHOTO_UPLOAD_WINDOW_EXPIRED`), 기존 사진에 이어 붙이되 최대 10장까지 유지한다. 저장 후 Discord 알림(F-020)이 발송된다.
+- ✅ `PUT /api/reservations/:id/luggage-owner-memo`(점주 JWT) — 점주 메모(최대 500자, 빈 문자열로 삭제)를 저장하며 다른 매장 예약 → 404. 메모와 짐 사진은 F-021 요약에 노출된다.
+- ✅ R2 환경변수(`CF_R2_ACCOUNT_ID`, `CF_R2_BUCKET`, `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`)는 필수이며 없으면 부팅이 실패한다.
+
 ---
 
 ## 4. 비기능 요구사항 (NFR)
@@ -335,6 +387,12 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | 소셜 로그인 | 10 req/min |
 | 관리자 로그인·refresh(`api/admin/auth`) | 15분 / 5회 (`AUTH_RATE_LIMIT_*`) |
 | 관리자 API(`api/admin/stores`, `api/admin/feedbacks`) | 60 req/min (IP) |
+| 점주 알림톡 액션 링크(`api/owner-actions/*`) | 30 req/min (IP) |
+| 비회원 리뷰 작성(`api/guest/reviews`) | 5 req/min (IP) |
+| 비회원 업로드 프리사인(`api/guest/uploads/presign`) | 15 req/min (IP) |
+| 비회원 짐 사진 multipart 업로드 | 10 req/min (비회원 예약 기본값 상속) |
+
+> 전역 스로틀러(`APP_GUARD`)는 없다. 표에 없는 JWT 보호 라우트(점주·고객 프리사인, 점주 리뷰 API, 점주 짐 사진 메모 등)에는 레이트리밋이 적용되지 않는다.
 
 ### 4.4 보안
 - ✅ 비밀번호는 bcryptjs 해시로 저장된다.
@@ -353,7 +411,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 계층: Controller(라우팅/검증) → Service(Query/Command 분리) → PrismaService(전역) → MySQL.
 - ✅ 전역 prefix는 없으며 경로 prefix(`api/...`)는 각 컨트롤러 데코레이터에서 직접 선언한다.
 - ✅ CORS(`CORS_ORIGIN`, credentials), Swagger(`SWAGGER_ENABLED`), 기본 포트 4000.
-- ✅ 모듈 11개(`src/app.module.ts`): addresses, auth, customer-auth, customer-stores, coupons, dashboard, feedbacks, health, stores, storages, reservations.
+- ✅ 기능 모듈 17개(`src/app.module.ts`): addresses, auth, admin-auth, admin, customer-auth, customer-stores, coupons, health, stores, storages, reservations, dashboard, feedbacks, notifications, uploads, owner-actions, reviews. 인프라 모듈은 config, logger(nestjs-pino), schedule, prisma, r2-storage다.
 - ✅ DB 스키마는 DB 우선 → `prisma db pull` 동기화로 관리하며, 변경 SQL은 `prisma/migrations/`에 병행 기록한다. 프로덕션 변경 시 영향도/롤백 계획을 필수로 한다.
 
 ---
@@ -365,10 +423,10 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | 제외 항목 | 사유 / 현재 상태 | 관련 테이블·자원 |
 |-----------|------------------|------------------|
 | 결제(PG/Toss) 연동 | 스키마만 존재, 로직 없음. (예약 생성→결제링크→웹훅→`payment_status=paid` 흐름 미구현) | `payments`, `payment_webhooks` |
-| 알림톡/SMS 발송 | 설정 플래그·수신번호만 존재, 발송 로직 없음 | `notifications`, `stores.notification_phone` |
+| 알림 이력·재발송·리마인더 | 발송 자체는 F-020으로 구현됨. `notifications` 테이블은 대시보드의 미읽음 건수 읽기만 있고 쓰기·목록·읽음 처리 API가 없으며, 전송 결과 저장·재시도·리마인더 발송 없음 | `notifications` |
 | 정산(Settlement) | 스키마만 존재(수수료 기본 0.2), 생성·지급 로직 없음. F-018 운영 현황 API도 정산 테이블을 읽지 않음 | `settlement_statements`, `store_settlement_accounts`, `settlement_items/logs/errors` |
 | 웹푸시 리마인더 | 구독 스키마만 존재, 발송 로직 없음 | `push_subscriptions.sent_reminder_at` |
-| 리뷰·고객센터 노출 | 스키마만 존재, 노출/응답 로직 없음 | `reviews`, `support_tickets/messages` |
+| 고객센터(문의 티켓) | 스키마만 존재, 로직 없음(리뷰는 F-022로 구현됨) | `support_tickets`, `support_messages` |
 | 관리자 쓰기 작업 | 매장 정지·강제 상태 변경·정산 지급 등 관리자 변경 작업. 조회는 F-018, 인증·계정은 F-019로 이동. 관리자 계정 관리 API(초대·비활성화)는 CLI로 대체하고 API는 두지 않음 | (운영 기능 전반) |
 | Naver/Apple 소셜 로그인 | enum/스키마만 존재, 검증 로직 없음(kakao만 구현) | `customer_auth_providers` |
 
