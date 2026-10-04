@@ -16,6 +16,7 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { FeedbacksModule } from './modules/feedbacks/feedbacks.module';
 import { HealthModule } from './modules/health/health.module';
+import { PublicHolidaysModule } from './modules/public-holidays/public-holidays.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { StoragesModule } from './modules/storages/storages.module';
 import { StoresModule } from './modules/stores/stores.module';
@@ -60,6 +61,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
     UploadsModule,
     OwnerActionsModule,
     ReviewsModule,
+    PublicHolidaysModule,
   ],
 })
 export class AppModule {}
