@@ -947,3 +947,11 @@ enum feedbacks_status {
   shipped
   rejected
 }
+
+/// 한국 공휴일(대체·임시공휴일 포함). 고객/매장 앱의 "공휴일 영업시간" 판별 기준.
+/// 행을 추가하면 앱 재배포 없이 반영된다.
+model public_holidays {
+  date       DateTime  @id @db.Date
+  name       String    @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+}
