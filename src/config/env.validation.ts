@@ -54,6 +54,10 @@ export const envValidationSchema = Joi.object({
   // 주소 검색 및 지오코딩에 사용
   KAKAO_REST_API_KEY: Joi.string().required(),
 
+  // 공공데이터포털 한국천문연구원 특일 정보 API 인증키(선택).
+  // 없으면 공휴일 자동 동기화를 건너뛰고 DB에 들어있는 값(시드·수동 추가)만 쓴다.
+  DATA_GO_KR_SERVICE_KEY: Joi.string().allow('', null).optional(),
+
   // Cloudflare R2 Object Storage
   CF_R2_ACCOUNT_ID: Joi.string().required(),
   CF_R2_BUCKET: Joi.string().required(),
