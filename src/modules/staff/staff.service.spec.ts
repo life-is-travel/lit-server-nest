@@ -214,6 +214,8 @@ describe('StaffService — 직원 시작·나가기', () => {
         business_type: 'CAFE',
         has_completed_setup: true,
         profile_image_url: null,
+        created_at: new Date('2026-09-01T00:00:00.000Z'),
+        updated_at: new Date('2026-09-02T00:00:00.000Z'),
         closed_at: null,
       },
     },
@@ -266,6 +268,9 @@ describe('StaffService — 직원 시작·나가기', () => {
         phoneNumber: null,
         businessNumber: null,
         representativeName: null,
+        // 앱 Store 모델이 createdAt을 필수로 읽으므로 점주 로그인 응답과 같이 내려준다.
+        createdAt: new Date('2026-09-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-09-02T00:00:00.000Z'),
       },
     });
   });

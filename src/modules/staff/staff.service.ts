@@ -211,6 +211,8 @@ export class StaffService {
         representativeName: null,
         address: store.address,
         detailAddress: store.detail_address,
+        createdAt: store.created_at,
+        updatedAt: store.updated_at,
       },
     };
   }
