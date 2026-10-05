@@ -147,6 +147,7 @@ describe('CustomerStoresService', () => {
     expect(prisma.stores.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          closed_at: null,
           OR: [
             { business_name: { contains: '루라운지' } },
             { address: { contains: '루라운지' } },
@@ -203,12 +204,25 @@ describe('CustomerStoresService', () => {
     expect(prisma.stores.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          closed_at: null,
           OR: [{ id: 'store-slug' }, { slug: 'store-slug' }],
         },
       }),
     );
     expect(result.businessName).toBe('루라운지 혼술바');
     expect(result.reservationCount).toBe(12);
+  });
+
+  it('excludes withdrawn stores from the list even without a keyword', async () => {
+    const { service, prisma } = createService();
+
+    prisma.stores.findMany.mockResolvedValue([]);
+
+    await service.listStores({});
+
+    expect(prisma.stores.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { closed_at: null } }),
+    );
   });
 
   it('throws NOT_FOUND when store detail does not exist', async () => {

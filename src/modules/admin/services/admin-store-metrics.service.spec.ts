@@ -404,7 +404,7 @@ describe('AdminStoreMetricsService', () => {
 
       // 필터가 없으면 전체 매장을 집계하므로 store_id IN 이 붙지 않는다.
       expect(prisma.stores.findMany).toHaveBeenCalledWith({
-        where: undefined,
+        where: { AND: [{ closed_at: null }] },
         select: expect.any(Object),
       });
       expect(revenue.where).not.toHaveProperty('store_id');
@@ -418,7 +418,9 @@ describe('AdminStoreMetricsService', () => {
       await service.listStores(listQuery({ search: '홍대' }));
 
       expect(prisma.stores.findMany).toHaveBeenCalledWith({
-        where: { AND: [{ business_name: { contains: '홍대' } }] },
+        where: {
+          AND: [{ closed_at: null }, { business_name: { contains: '홍대' } }],
+        },
         select: expect.any(Object),
       });
 
@@ -438,6 +440,7 @@ describe('AdminStoreMetricsService', () => {
       expect(prisma.stores.findMany).toHaveBeenCalledWith({
         where: {
           AND: [
+            { closed_at: null },
             {
               OR: [
                 { has_completed_setup: false },

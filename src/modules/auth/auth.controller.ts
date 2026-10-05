@@ -28,6 +28,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendEmailVerificationDto } from './dto/send-email-verification.dto';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { WithdrawDto } from './dto/withdraw.dto';
 import { AuthService } from './auth.service';
 
 @ApiTags('Store Auth')
@@ -95,5 +96,17 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(storeId, dto);
+  }
+
+  @Post('withdraw')
+  @UseGuards(StoreAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '매장 계정을 탈퇴(개인정보 익명화)하고 고객 노출을 중단합니다.',
+  })
+  @ApiOkResponse()
+  withdraw(@CurrentStoreId() storeId: string, @Body() dto: WithdrawDto) {
+    return this.authService.withdraw(storeId, dto);
   }
 }

@@ -573,17 +573,18 @@ export class ReservationCommandService {
   ): Promise<{ id: string; business_name: string }> {
     const store = await this.prisma.stores.findUnique({
       where: { id: storeId },
-      select: { id: true, business_name: true },
+      select: { id: true, business_name: true, closed_at: true },
     });
 
-    if (!store) {
+    // 탈퇴한 매장(closed_at)에는 예약을 만들 수 없다.
+    if (!store || store.closed_at) {
       throw new NotFoundException({
         code: 'STORE_NOT_FOUND',
         message: '점포를 찾을 수 없습니다.',
       });
     }
 
-    return store;
+    return { id: store.id, business_name: store.business_name };
   }
 
   private async sendReservationCreatedEmailSafely(params: {

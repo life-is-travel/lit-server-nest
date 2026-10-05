@@ -72,6 +72,29 @@ const createReservationCommandService = () => {
 };
 
 describe('ReservationCommandService', () => {
+  it('rejects a customer reservation for a withdrawn store', async () => {
+    const { service, prisma } = createReservationCommandService();
+
+    prisma.stores.findUnique.mockResolvedValue({
+      id: 'store_withdrawn',
+      business_name: '폐점한 매장',
+      closed_at: new Date('2026-10-01T00:00:00.000Z'),
+    });
+
+    await expect(
+      service.createCustomerReservation('customer_1', {
+        storeId: 'store_withdrawn',
+        customerName: '홍길동',
+        phoneNumber: '01012345678',
+        startTime: '2026-04-27T10:00:00+09:00',
+        duration: 4,
+        bagCount: 1,
+        storageType: reservations_requested_storage_type.s,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'STORE_NOT_FOUND' } });
+    expect(prisma.reservations.create).not.toHaveBeenCalled();
+  });
+
   it('approves a reservation and assigns an available storage in one transaction', async () => {
     const { service, tx } = createReservationCommandService();
     const startTime = new Date('2026-04-27T01:00:00.000Z');

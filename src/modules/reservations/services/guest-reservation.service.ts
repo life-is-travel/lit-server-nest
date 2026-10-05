@@ -949,6 +949,7 @@ export class GuestReservationService {
   private async resolveStore(idOrSlug: string) {
     const store = await this.prisma.stores.findFirst({
       where: {
+        closed_at: null,
         OR: [{ id: idOrSlug }, { slug: idOrSlug }],
       },
       select: {
