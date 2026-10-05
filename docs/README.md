@@ -112,7 +112,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 비밀번호가 일치하지 않으면 401 `INVALID_CURRENT_PASSWORD`로 거절하며 어떤 데이터도 바뀌지 않는다. 점주가 존재하지 않거나 이미 탈퇴했으면 404 `STORE_NOT_FOUND`다.
 - ✅ 진행 중 예약(`pending`·`pending_approval`·`confirmed`·`in_progress`)이 1건이라도 있으면 409 `ACTIVE_RESERVATIONS_EXIST`(`details.count` = 해당 예약 행 수)로 거절하며 어떤 데이터도 바뀌지 않는다.
 - ✅ 성공하면 한 트랜잭션에서 다음을 처리한다. **삭제**: refresh 토큰 전체, 정산 계좌(`store_settlement_accounts`), 매장 설정·운영시간(`store_settings`, `store_operating_hours`), 점주 알림(`notifications`). **익명화**(`stores` 행은 유지): `email`→`withdrawn_<id>@withdrawn.invalid`, `password_hash`→로그인이 불가능한 무작위 해시, `business_name`→`폐점한 매장`, 그 밖의 개인·사업자·위치 정보(PIN·전화번호들·SMS 수신·사업자번호·대표자명·주소·좌표·소개·프로필 이미지·slug)는 비우고, `closed_at`에 탈퇴 시각을 기록한다. **보존**: 예약·결제·정산서·통계·리뷰·보관함(거래기록 보관 의무 대상 및 고객 데이터).
-- ✅ 탈퇴 시 같은 트랜잭션에서 그 매장의 직원(F-024)을 모두 해제하고 미사용 초대코드를 폐기하며, 직원 refresh 토큰도 삭제된다(refresh 토큰 전체 삭제에 포함).
+- ✅ 탈퇴 시 같은 트랜잭션에서 그 매장의 직원(F-024)을 모두 해제(이름은 `탈퇴한 직원`으로 익명화)하고 미사용 초대코드를 폐기하며, 직원 refresh 토큰도 삭제된다(refresh 토큰 전체 삭제에 포함).
 - ✅ 탈퇴 후 이전 이메일·사업자번호로 **새로 가입**할 수 있다. 이전 계정으로는 로그인·토큰 갱신이 불가능하다. 이미 발급된 access 토큰은 만료(1시간)까지 서명상 유효하지만 refresh 토큰이 없어 연장되지 않는다.
 
 ### F-002 고객 소셜 인증 (`api/customer/auth`)

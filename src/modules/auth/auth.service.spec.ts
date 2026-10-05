@@ -384,7 +384,10 @@ describe('AuthService', () => {
       // 직원 세션은 refresh_tokens 전체 삭제에 포함되고, 직원·미사용 초대코드도 정리한다.
       expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
         where: { store_id: 'store_1', status: 'active' },
-        data: expect.objectContaining({ status: 'revoked' }),
+        data: expect.objectContaining({
+          status: 'revoked',
+          name: '탈퇴한 직원',
+        }),
       });
       expect(tx.store_staff_invite_codes.updateMany).toHaveBeenCalledWith({
         where: { store_id: 'store_1', used_at: null, revoked_at: null },
