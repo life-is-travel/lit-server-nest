@@ -62,6 +62,7 @@ const ACTIVE_RESERVATION_STATUSES: reservations_status[] = [
 ];
 
 const WITHDRAWN_STORE_NAME = '폐점한 매장';
+const WITHDRAWN_STAFF_NAME = '탈퇴한 직원';
 const WITHDRAWN_EMAIL_DOMAIN = 'withdrawn.invalid';
 
 const MAX_LOGIN_FAILURES = 5;
@@ -377,10 +378,11 @@ export class AuthService {
       await tx.notifications.deleteMany({ where });
 
       const now = new Date();
-      // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 직원과 미사용 초대코드도 정리한다.
+      // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 직원(이름 익명화)과 미사용 초대코드도 정리한다.
       await tx.store_staff.updateMany({
         where: { store_id: store.id, status: store_staff_status.active },
         data: {
+          name: WITHDRAWN_STAFF_NAME,
           status: store_staff_status.revoked,
           revoked_at: now,
           updated_at: now,
