@@ -95,7 +95,8 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 인증코드 발송 요청은 1분에 1회로 제한된다(초과 시 거절).
 - ✅ 인증코드는 6자리, 유효기간 180초이며 최대 5회 검증 시도 후 만료된다.
 - ✅ 이메일 인증을 통과해야만 `register`로 점주 계정을 생성할 수 있다.
-- ✅ 로그인 성공 시 access 토큰(1시간)과 refresh 토큰(30일)을 발급한다.
+- ✅ 로그인 성공 시 access 토큰(1시간)과 refresh 토큰을 발급한다. 점주 refresh 토큰 유효기간은 `STORE_REFRESH_TOKEN_EXPIRES_IN`(기본 `365d`)을 따르며, 고객 refresh 토큰은 기존 `JWT_REFRESH_TOKEN_EXPIRES_IN`을 그대로 쓴다.
+- ✅ `POST /api/auth/refresh`는 refresh 토큰을 회전하지 않는다. 같은 refresh 토큰으로 여러 번(동시 요청 포함) 갱신할 수 있으며, DB에 저장된 토큰이 삭제되면 즉시 갱신이 거부된다.
 - ✅ 점주 토큰 페이로드는 `{ storeId, email, type }`를 포함한다.
 - ✅ 인증 API는 15분 동안 5회를 초과하면 레이트리밋으로 차단된다(`AUTH_RATE_LIMIT_*`).
 - ✅ 비밀번호는 평문이 아닌 bcryptjs 해시로 저장된다.

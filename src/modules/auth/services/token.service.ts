@@ -42,9 +42,7 @@ export class TokenService {
         secret: this.configService.getOrThrow<string>(
           'JWT_REFRESH_TOKEN_SECRET',
         ),
-        expiresIn: toSeconds(
-          this.configService.getOrThrow<string>('JWT_REFRESH_TOKEN_EXPIRES_IN'),
-        ),
+        expiresIn: this.getStoreRefreshTokenExpiresInSeconds(),
       },
     );
   }
@@ -250,6 +248,19 @@ export class TokenService {
   getAccessTokenExpiresInSeconds(): number {
     return toSeconds(
       this.configService.getOrThrow<string>('JWT_ACCESS_TOKEN_EXPIRES_IN'),
+    );
+  }
+
+  /** 점주 refresh 토큰 만료 시각. 고객·관리자는 getRefreshTokenExpiresAt을 쓴다. */
+  getStoreRefreshTokenExpiresAt(): Date {
+    return new Date(
+      Date.now() + this.getStoreRefreshTokenExpiresInSeconds() * 1000,
+    );
+  }
+
+  private getStoreRefreshTokenExpiresInSeconds(): number {
+    return toSeconds(
+      this.configService.getOrThrow<string>('STORE_REFRESH_TOKEN_EXPIRES_IN'),
     );
   }
 
