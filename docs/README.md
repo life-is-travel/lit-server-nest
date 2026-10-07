@@ -82,6 +82,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | F-021 | 점주 알림톡 액션 링크(요약·체크인·체크아웃·노쇼) | `api/owner-actions/reservations` | Must | 구현완료 |
 | F-022 | 리뷰(비회원 작성·점주 답글·통계) | `api/guest/reviews`, `api/reviews` | Should | 구현완료 |
 | F-023 | 사진 업로드(R2 프리사인)·짐 사진 | `*/uploads/presign`, `api/guest/reservations/*luggage-photos` | Should | 구현완료 |
+| F-024 | 직원 계정(초대코드)·직원 권한 | `api/store/staff`, `api/auth/staff/*` | Should | 구현예정 |
 
 ---
 
@@ -95,12 +96,13 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 인증코드 발송 요청은 1분에 1회로 제한된다(초과 시 거절).
 - ✅ 인증코드는 6자리, 유효기간 180초이며 최대 5회 검증 시도 후 만료된다.
 - ✅ 이메일 인증을 통과해야만 `register`로 점주 계정을 생성할 수 있다.
-- ✅ 로그인 성공 시 access 토큰(1시간)과 refresh 토큰(30일)을 발급한다.
-- ✅ 점주 토큰 페이로드는 `{ storeId, email, type }`를 포함한다.
+- ✅ 로그인 성공 시 access 토큰(1시간)과 refresh 토큰을 발급한다. 점주·직원(F-024) refresh 토큰 유효기간은 `STORE_REFRESH_TOKEN_EXPIRES_IN`(기본 `365d`)을 따르며, 고객 refresh 토큰은 기존 `JWT_REFRESH_TOKEN_EXPIRES_IN`을 그대로 쓴다.
+- ✅ `POST /api/auth/refresh`는 refresh 토큰을 회전하지 않는다. 같은 refresh 토큰으로 여러 번(동시 요청 포함) 갱신할 수 있으며, DB에 저장된 토큰이 삭제되면 즉시 갱신이 거부된다.
+- ✅ 점주 access 토큰 페이로드는 `{ storeId, email, type, role: 'owner' }`다. `role`이 없는 토큰(이 변경 이전 발급분)은 점주로 간주한다.
 - ✅ 인증 API는 15분 동안 5회를 초과하면 레이트리밋으로 차단된다(`AUTH_RATE_LIMIT_*`).
 - ✅ 비밀번호는 평문이 아닌 bcryptjs 해시로 저장된다.
 - ✅ 인증된 점주는 `PATCH /api/auth/password`로 현재 비밀번호를 확인받은 뒤 새 비밀번호(최소 8자)로 변경할 수 있다. 현재 비밀번호가 일치하지 않으면 거절된다.
-- ✅ 비밀번호 변경에 성공하면 해당 점주의 기존 refresh 토큰(세션)은 모두 무효화된다.
+- ✅ 비밀번호 변경에 성공하면 해당 점주의 기존 refresh 토큰(세션)은 모두 무효화된다. 직원(F-024) 세션에는 영향이 없다.
 - ✅ 로그인(`login`)에 성공하면 매장의 `last_login_at`이 현재 시각으로 갱신되고, 실패 카운트(`login_count`)와 잠금(`login_locked_until`)이 초기화된다.
 - ✅ 로그인 비밀번호를 5회 연속 틀리면 계정이 10분간 잠기고(`login_count`/`login_locked_until`), 잠금 해제 시각 전까지는 비밀번호가 맞아도 로그인이 거부된다(PIN 잠금과 동일 정책).
 
@@ -110,6 +112,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 비밀번호가 일치하지 않으면 401 `INVALID_CURRENT_PASSWORD`로 거절하며 어떤 데이터도 바뀌지 않는다. 점주가 존재하지 않거나 이미 탈퇴했으면 404 `STORE_NOT_FOUND`다.
 - ✅ 진행 중 예약(`pending`·`pending_approval`·`confirmed`·`in_progress`)이 1건이라도 있으면 409 `ACTIVE_RESERVATIONS_EXIST`(`details.count` = 해당 예약 행 수)로 거절하며 어떤 데이터도 바뀌지 않는다.
 - ✅ 성공하면 한 트랜잭션에서 다음을 처리한다. **삭제**: refresh 토큰 전체, 정산 계좌(`store_settlement_accounts`), 매장 설정·운영시간(`store_settings`, `store_operating_hours`), 점주 알림(`notifications`). **익명화**(`stores` 행은 유지): `email`→`withdrawn_<id>@withdrawn.invalid`, `password_hash`→로그인이 불가능한 무작위 해시, `business_name`→`폐점한 매장`, 그 밖의 개인·사업자·위치 정보(PIN·전화번호들·SMS 수신·사업자번호·대표자명·주소·좌표·소개·프로필 이미지·slug)는 비우고, `closed_at`에 탈퇴 시각을 기록한다. **보존**: 예약·결제·정산서·통계·리뷰·보관함(거래기록 보관 의무 대상 및 고객 데이터).
+- ✅ 탈퇴 시 같은 트랜잭션에서 그 매장의 직원(F-024)을 모두 해제(이름은 `탈퇴한 직원`으로 익명화)하고 미사용 초대코드를 폐기하며, 직원 refresh 토큰도 삭제된다(refresh 토큰 전체 삭제에 포함).
 - ✅ 탈퇴 후 이전 이메일·사업자번호로 **새로 가입**할 수 있다. 이전 계정으로는 로그인·토큰 갱신이 불가능하다. 이미 발급된 access 토큰은 만료(1시간)까지 서명상 유효하지만 refresh 토큰이 없어 연장되지 않는다.
 
 ### F-002 고객 소셜 인증 (`api/customer/auth`)
@@ -373,6 +376,41 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ `PATCH /api/guest/reservations/:id/luggage-photos` — `customerPhone` 또는 `customerEmail`로 본인을 확인하고(불일치 403), 예약 생성 후 24시간 이내에만 허용하며(400 `PHOTO_UPLOAD_WINDOW_EXPIRED`), 기존 사진에 이어 붙이되 최대 10장까지 유지한다. 저장 후 Discord 알림(F-020)이 발송된다.
 - ✅ `PUT /api/reservations/:id/luggage-owner-memo`(점주 JWT) — 점주 메모(최대 500자, 빈 문자열로 삭제)를 저장하며 다른 매장 예약 → 404. 메모와 짐 사진은 F-021 요약에 노출된다.
 - ✅ R2 환경변수(`CF_R2_ACCOUNT_ID`, `CF_R2_BUCKET`, `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`)는 필수이며 없으면 부팅이 실패한다.
+
+### F-024 직원 계정·초대코드·직원 권한 (`api/store/staff`, `api/auth/staff/*`)
+**유저 스토리**: 점주로서 직원에게 내 비밀번호를 알려주지 않고 앱을 쓰게 하고, 그만둔 직원은 즉시 끊는다. 직원으로서 이메일 가입 없이 점주가 준 코드만 입력해 예약·체크인 업무를 한다.
+
+> 상태: **구현예정**. 설계 근거와 결정 기록은 Obsidian `lit/Claude/점주앱-직원계정-초대코드-PRD-초안-2026-10`.
+
+**직원 관리 (점주 전용)**
+- ✅ `POST /api/store/staff` `{ name }`(1~30자) — 직원을 등록하고 초대코드를 발급한다. 응답 `{ staff, inviteCode, expiresAt }`의 코드는 이 응답에서만 평문으로 내려가고 서버에는 SHA-256 해시만 저장된다.
+- ✅ 매장당 해제되지 않은 직원은 최대 10명이다. 초과 시 409 `STAFF_LIMIT_EXCEEDED`.
+- ✅ `GET /api/store/staff` — `{ id, name, status, joinedAt, lastActiveAt, pendingInvite: { expiresAt } | null }` 목록. 해제된 직원은 `?includeRevoked=true`일 때만 포함된다.
+- ✅ `POST /api/store/staff/:id/invite-code` — 같은 직원에게 코드를 재발급한다. 이 직원의 미사용 코드는 폐기되고, 이미 연결된 기기 세션은 유지된다.
+- ✅ `DELETE /api/store/staff/:id` — 직원을 해제한다(`status = revoked`, 직원 refresh 토큰 전부 삭제, 미사용 코드 폐기). 해제 직후 그 직원의 access 토큰도 401 `STAFF_REVOKED`로 거부된다.
+- ✅ 다른 매장 직원이거나 이미 해제된 직원을 재발급·해제하면 404 `STAFF_NOT_FOUND`다.
+
+**초대코드**
+- ✅ 코드는 헷갈리는 문자(0·O·1·I·L)를 뺀 대문자·숫자 8자이며 `ABCD-EFGH` 형식으로 표시된다. 입력 시 하이픈·공백·대소문자는 무시한다.
+- ✅ 코드는 일회용이며 발급 후 24시간 뒤 만료된다.
+
+**직원 시작·나가기**
+- ✅ `POST /api/auth/staff/redeem` `{ code }`(무인증, 인증 API 레이트리밋 15분 5회) — 직원 access·refresh 토큰과 `user_info`(`role: 'staff'`, `staffId`, 직원 이름, 매장 기본 정보)를 반환하고, 코드를 사용 처리하며 `joined_at`(최초 1회)·`last_active_at`을 기록한다.
+- ✅ 존재하지 않음·만료·사용됨·해제된 직원·탈퇴한 매장의 코드는 모두 400 `INVITE_CODE_INVALID` 하나로 응답한다.
+- ✅ 직원 access 토큰 페이로드는 `{ storeId, staffId, type, role: 'staff' }`다.
+- ✅ 직원 refresh 토큰으로 `POST /api/auth/refresh` 하면 직원이 `active`이고 매장이 탈퇴 상태가 아닐 때만 직원 access 토큰을 발급하고 `last_active_at`을 갱신한다. 아니면 401 `STAFF_REVOKED`.
+- ✅ `POST /api/auth/logout`은 직원 refresh 토큰에도 동작한다(그 기기만 로그아웃).
+- ✅ `POST /api/auth/staff/leave`(직원 JWT) — 직원 스스로 나간다. 해제와 같은 처리에 더해 이름을 `탈퇴한 직원`으로 익명화한다.
+
+**직원 권한 (기본 거부)**
+- ✅ 직원 토큰은 아래 허용 목록의 API만 호출할 수 있고, 그 밖의 점주 API는 403 `OWNER_ONLY`다. 점주 토큰은 기존과 같이 모든 점주 API를 쓴다.
+- ✅ 직원 허용: 예약 목록·상세·생성·승인·체크인·노쇼·짐 점주 메모(`GET/POST /api/reservations`, `GET :id`, `PUT :id/approve|checkin|no-show|luggage-owner-memo`), 예약 상태 변경(`PUT :id/status`, 단 아래 제한), 업로드 프리사인(`POST /api/uploads/presign`), 보관함 조회(`GET /api/storages`, `GET :id`), 영업 상태(`GET/PUT /api/store/status`, `POST open|close`), 매장 정보·설정 조회(`GET /api/store`, `GET /api/store/settings`), 대시보드 요약·실시간(`GET /api/dashboard/summary|realtime`), 리뷰 조회(`GET /api/reviews`, `GET statistics`), 쿠폰 정책 조회(`GET /api/store/coupons/policies`, `GET :id`), 본인 세션(`POST /api/auth/refresh|logout|staff/leave`).
+- ✅ 직원은 예약 거절·취소(`PUT :id/reject|cancel`)를 할 수 없고, `PUT :id/status`로도 `rejected`·`cancelled`로 바꿀 수 없다(403 `OWNER_ONLY`).
+- ✅ 직원이 받는 대시보드 `summary`·`realtime` 응답의 매출 금액 필드는 `null`이다.
+- ✅ 직원이 받는 `GET /api/store` 응답과 redeem `user_info`에는 점주 개인·사업자 신원 정보(`email`, `phoneNumber`, `notificationPhone(s)`, `businessNumber`, `representativeName`)가 비어 있다(`null`/`[]`).
+- ✅ 점주 로그인·가입 응답 `user_info.role`은 `owner`, 직원 redeem 응답은 `staff`다.
+- ✅ 직원 요청마다 직원 `status = active`와 매장 `closed_at IS NULL`을 DB로 확인한다. 점주 요청은 DB 확인 없이 토큰만 검증한다(기존과 동일).
+- ✅ 점주 알림톡 액션 링크(F-021)는 별도 토큰 방식이라 영향이 없다.
 
 ---
 

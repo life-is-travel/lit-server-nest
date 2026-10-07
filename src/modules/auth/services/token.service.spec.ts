@@ -11,6 +11,7 @@ const ENV: Record<string, string> = {
     'admin-refresh-secret-value-over-32-characters',
   JWT_ACCESS_TOKEN_EXPIRES_IN: '1h',
   JWT_REFRESH_TOKEN_EXPIRES_IN: '30d',
+  STORE_REFRESH_TOKEN_EXPIRES_IN: '365d',
 };
 
 const createTokenService = () => {
@@ -119,5 +120,99 @@ describe('TokenService (admin tokens)', () => {
     expect((caught as UnauthorizedException).getResponse()).toMatchObject({
       code: 'TOKEN_INVALID',
     });
+  });
+});
+
+const DAY = 24 * 60 * 60;
+
+const lifetimeSeconds = (jwtService: JwtService, token: string): number => {
+  const decoded = jwtService.decode<{ iat: number; exp: number }>(token);
+  return decoded.exp - decoded.iat;
+};
+
+describe('TokenService (store owner/staff tokens)', () => {
+  it('issues owner access tokens with role owner', () => {
+    const { service } = createTokenService();
+
+    const token = service.generateAccessToken('store_1', 'owner@example.com');
+
+    expect(service.verifyAccessToken(token)).toMatchObject({
+      storeId: 'store_1',
+      email: 'owner@example.com',
+      role: 'owner',
+      type: 'access',
+    });
+  });
+
+  it('treats legacy access tokens without role as owner', () => {
+    const { service, jwtService } = createTokenService();
+    const legacy = jwtService.sign(
+      { storeId: 'store_1', email: 'owner@example.com', type: 'access' },
+      { secret: ENV.JWT_ACCESS_TOKEN_SECRET, expiresIn: 3600 },
+    );
+
+    expect(service.verifyAccessToken(legacy).role).toBe('owner');
+  });
+
+  it('round-trips staff access and refresh tokens with staffId', () => {
+    const { service } = createTokenService();
+
+    const access = service.generateStaffAccessToken('store_1', 'staff_1');
+    const refresh = service.generateStaffRefreshToken('store_1', 'staff_1');
+
+    expect(service.verifyAccessToken(access)).toMatchObject({
+      storeId: 'store_1',
+      staffId: 'staff_1',
+      role: 'staff',
+    });
+    expect(service.verifyRefreshToken(refresh)).toMatchObject({
+      storeId: 'store_1',
+      staffId: 'staff_1',
+      role: 'staff',
+      type: 'refresh',
+    });
+  });
+
+  it('rejects a staff access token without staffId', () => {
+    const { service, jwtService } = createTokenService();
+    const broken = jwtService.sign(
+      { storeId: 'store_1', role: 'staff', type: 'access' },
+      { secret: ENV.JWT_ACCESS_TOKEN_SECRET, expiresIn: 3600 },
+    );
+
+    expect(() => service.verifyAccessToken(broken)).toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('uses STORE_REFRESH_TOKEN_EXPIRES_IN for owner and staff refresh tokens', () => {
+    const { service, jwtService } = createTokenService();
+
+    expect(
+      lifetimeSeconds(
+        jwtService,
+        service.generateRefreshToken('store_1', 'owner@example.com'),
+      ),
+    ).toBe(365 * DAY);
+    expect(
+      lifetimeSeconds(
+        jwtService,
+        service.generateStaffRefreshToken('store_1', 'staff_1'),
+      ),
+    ).toBe(365 * DAY);
+
+    const expiresAt = service.getStoreRefreshTokenExpiresAt().getTime();
+    expect(expiresAt - Date.now()).toBeGreaterThan(364 * DAY * 1000);
+  });
+
+  it('keeps customer refresh tokens on JWT_REFRESH_TOKEN_EXPIRES_IN', () => {
+    const { service, jwtService } = createTokenService();
+
+    expect(
+      lifetimeSeconds(
+        jwtService,
+        service.generateCustomerRefreshToken('customer_1'),
+      ),
+    ).toBe(30 * DAY);
   });
 });

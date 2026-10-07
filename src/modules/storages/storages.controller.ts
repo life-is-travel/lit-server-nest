@@ -27,6 +27,7 @@ import {
 } from './dto/storage.dto';
 import { StoragesCommandService } from './services/storages-command.service';
 import { StoragesQueryService } from './services/storages-query.service';
+import { StaffAllowed } from '../auth/decorators/staff-allowed.decorator';
 
 @ApiTags('Storages')
 @ApiBearerAuth()
@@ -41,6 +42,7 @@ export class StoragesController {
   @Get()
   @ApiOperation({ summary: '매장의 보관함 목록을 조회합니다.' })
   @ApiOkResponse({ type: StorageListResponseDto })
+  @StaffAllowed()
   listStorages(
     @CurrentStoreId() storeId: string,
     @Query() query: ListStoragesQueryDto,
@@ -51,6 +53,7 @@ export class StoragesController {
   @Get(':id')
   @ApiOperation({ summary: '매장의 보관함 상세 정보를 조회합니다.' })
   @ApiOkResponse({ type: StorageResponseDto })
+  @StaffAllowed()
   getStorage(@CurrentStoreId() storeId: string, @Param('id') id: string) {
     return this.storagesQueryService.getStorage(storeId, id);
   }
