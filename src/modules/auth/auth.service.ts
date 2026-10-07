@@ -115,7 +115,7 @@ export class AuthService {
     const storeId = `store_${randomUUID()}`;
     const refreshToken = this.tokenService.generateRefreshToken(storeId, email);
     const accessToken = this.tokenService.generateAccessToken(storeId, email);
-    const refreshTokenExpiresAt = this.tokenService.getRefreshTokenExpiresAt();
+    const refreshTokenExpiresAt = this.tokenService.getStoreRefreshTokenExpiresAt();
 
     const createdStore = await this.prisma.$transaction(async (tx) => {
       const slug = await this.generateUniqueSlug(tx, businessName);
@@ -228,7 +228,7 @@ export class AuthService {
       data: {
         store_id: store.id,
         token: refreshToken,
-        expires_at: this.tokenService.getRefreshTokenExpiresAt(),
+        expires_at: this.tokenService.getStoreRefreshTokenExpiresAt(),
       },
     });
 

@@ -17,6 +17,8 @@ export const envValidationSchema = Joi.object({
   JWT_REFRESH_TOKEN_SECRET: Joi.string().min(32).required(),
   JWT_ACCESS_TOKEN_EXPIRES_IN: Joi.string().default('1h'),
   JWT_REFRESH_TOKEN_EXPIRES_IN: Joi.string().default('30d'),
+  // 점주 앱은 매장 기기에서 계속 로그인 상태를 유지한다(고객·관리자와 분리).
+  STORE_REFRESH_TOKEN_EXPIRES_IN: Joi.string().default('365d'),
   // 관리자 토큰은 점주·고객과 다른 시크릿으로 서명한다(상호 위조 방지).
   JWT_ADMIN_ACCESS_TOKEN_SECRET: Joi.string().min(32).required(),
   JWT_ADMIN_REFRESH_TOKEN_SECRET: Joi.string().min(32).required(),
