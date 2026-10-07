@@ -8,6 +8,7 @@ import {
 import {
   Prisma,
   reservations_status,
+  store_staff_status,
   store_status_status,
   stores,
 } from '@prisma/client';
@@ -137,7 +138,8 @@ export class AuthService {
     const storeId = `store_${randomUUID()}`;
     const refreshToken = this.tokenService.generateRefreshToken(storeId, email);
     const accessToken = this.tokenService.generateAccessToken(storeId, email);
-    const refreshTokenExpiresAt = this.tokenService.getStoreRefreshTokenExpiresAt();
+    const refreshTokenExpiresAt =
+      this.tokenService.getStoreRefreshTokenExpiresAt();
 
     const createdStore = await this.prisma.$transaction(async (tx) => {
       const slug = await this.generateUniqueSlug(tx, businessName);
@@ -375,6 +377,20 @@ export class AuthService {
       await tx.notifications.deleteMany({ where });
 
       const now = new Date();
+      // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 직원과 미사용 초대코드도 정리한다.
+      await tx.store_staff.updateMany({
+        where: { store_id: store.id, status: store_staff_status.active },
+        data: {
+          status: store_staff_status.revoked,
+          revoked_at: now,
+          updated_at: now,
+        },
+      });
+      await tx.store_staff_invite_codes.updateMany({
+        where: { store_id: store.id, used_at: null, revoked_at: null },
+        data: { revoked_at: now },
+      });
+
       await tx.stores.update({
         where: { id: store.id },
         data: {
@@ -451,6 +467,13 @@ export class AuthService {
       });
     }
 
+    if (tokenRecord.staff_id) {
+      return this.refreshStaffSession(
+        tokenRecord.store_id,
+        tokenRecord.staff_id,
+      );
+    }
+
     const store = await this.prisma.stores.findUnique({
       where: { id: tokenRecord.store_id },
       select: { id: true, email: true },
@@ -465,6 +488,40 @@ export class AuthService {
 
     return {
       token: this.tokenService.generateAccessToken(store.id, store.email),
+      expiresIn: this.tokenService.getAccessTokenExpiresInSeconds(),
+    };
+  }
+
+  /** 직원(F-024) 세션 갱신. 해제된 직원·탈퇴한 매장이면 거부한다. */
+  private async refreshStaffSession(
+    storeId: string,
+    staffId: string,
+  ): Promise<RefreshAccessTokenResponseDto> {
+    const staff = await this.prisma.store_staff.findFirst({
+      where: {
+        id: staffId,
+        store_id: storeId,
+        status: store_staff_status.active,
+        stores: { closed_at: null },
+      },
+      select: { id: true },
+    });
+
+    if (!staff) {
+      throw new UnauthorizedException({
+        code: 'STAFF_REVOKED',
+        message:
+          '직원 권한이 해제되었습니다. 점주에게 새 초대코드를 받아주세요.',
+      });
+    }
+
+    await this.prisma.store_staff.update({
+      where: { id: staff.id },
+      data: { last_active_at: new Date() },
+    });
+
+    return {
+      token: this.tokenService.generateStaffAccessToken(storeId, staff.id),
       expiresIn: this.tokenService.getAccessTokenExpiresInSeconds(),
     };
   }
@@ -563,6 +620,7 @@ export class AuthService {
       user_info: {
         id: store.id,
         storeId: store.id,
+        role: 'owner',
         email: store.email,
         businessName: store.business_name,
         phoneNumber: store.phone_number,
@@ -613,7 +671,9 @@ export class AuthService {
 
 // notification_phones는 JSON 컬럼이라 문자열 배열로 정규화한다.
 // store-profile.mapper의 동일 헬퍼와 로직을 맞춘다.
-const toStringArray = (value: Prisma.JsonValue | null | undefined): string[] => {
+const toStringArray = (
+  value: Prisma.JsonValue | null | undefined,
+): string[] => {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
 };

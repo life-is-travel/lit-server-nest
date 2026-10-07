@@ -17,7 +17,10 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentStoreId } from '../auth/decorators/current-store.decorator';
+import {
+  CurrentStore,
+  CurrentStoreId,
+} from '../auth/decorators/current-store.decorator';
 import { StoreAuthGuard } from '../auth/guards/store-auth.guard';
 import {
   CreateReservationDto,
@@ -35,6 +38,9 @@ import { QrCheckinService } from './services/qr-checkin.service';
 import { ReservationCommandService } from './services/reservation-command.service';
 import { ReservationNoShowService } from './services/reservation-no-show.service';
 import { ReservationQueryService } from './services/reservation-query.service';
+import { StaffAllowed } from '../auth/decorators/staff-allowed.decorator';
+import type { AuthenticatedStore } from '../auth/guards/store-auth.guard';
+import { assertActorCanSetReservationStatus } from '../auth/utils/staff-view.util';
 
 @ApiTags('Reservations')
 @ApiBearerAuth()
@@ -51,6 +57,7 @@ export class ReservationsController {
   @Post()
   @ApiOperation({ summary: '매장 예약을 생성합니다.' })
   @ApiCreatedResponse({ type: ReservationResponseDto })
+  @StaffAllowed()
   createReservation(
     @CurrentStoreId() storeId: string,
     @Body() dto: CreateReservationDto,
@@ -61,6 +68,7 @@ export class ReservationsController {
   @Get()
   @ApiOperation({ summary: '매장 예약 목록을 조회합니다.' })
   @ApiOkResponse({ type: ReservationListResponseDto })
+  @StaffAllowed()
   getReservations(
     @CurrentStoreId() storeId: string,
     @Query() query: ListStoreReservationsQueryDto,
@@ -71,6 +79,7 @@ export class ReservationsController {
   @Get(':id')
   @ApiOperation({ summary: '매장 예약 상세를 조회합니다.' })
   @ApiOkResponse({ type: ReservationResponseDto })
+  @StaffAllowed()
   getReservation(@CurrentStoreId() storeId: string, @Param('id') id: string) {
     return this.reservationQueryService.getStoreReservation(storeId, id);
   }
@@ -79,6 +88,7 @@ export class ReservationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '매장 예약을 승인하고 보관함을 배정합니다.' })
   @ApiOkResponse({ type: ReservationStatusResponseDto })
+  @StaffAllowed()
   approveReservation(
     @CurrentStoreId() storeId: string,
     @Param('id') id: string,
@@ -112,12 +122,15 @@ export class ReservationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '매장 예약 상태를 변경합니다.' })
   @ApiOkResponse({ type: ReservationStatusResponseDto })
+  @StaffAllowed()
   updateReservationStatus(
     @CurrentStoreId() storeId: string,
     @Param('id') id: string,
     @Body() dto: UpdateReservationStatusDto,
+    @CurrentStore() actor?: AuthenticatedStore,
   ) {
     const status = this.reservationCommandService.normalizeStatus(dto.status);
+    assertActorCanSetReservationStatus(actor, status);
 
     return this.reservationCommandService.updateReservationStatus(
       storeId,
@@ -130,6 +143,7 @@ export class ReservationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '매장 예약 체크인을 완료합니다.' })
   @ApiOkResponse({ type: ReservationStatusResponseDto })
+  @StaffAllowed()
   storeCheckin(
     @CurrentStoreId() storeId: string,
     @Param('id') id: string,
@@ -144,6 +158,7 @@ export class ReservationsController {
     summary: '매장 예약을 노쇼 처리합니다 (보관 시작 시각 경과 후에만).',
   })
   @ApiOkResponse({ type: ReservationStatusResponseDto })
+  @StaffAllowed()
   async markNoShow(
     @CurrentStoreId() storeId: string,
     @Param('id') id: string,
@@ -156,6 +171,7 @@ export class ReservationsController {
   @Put(':id/luggage-owner-memo')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '점주가 짐 확인 메모를 저장합니다.' })
+  @StaffAllowed()
   setLuggageOwnerMemo(
     @CurrentStoreId() storeId: string,
     @Param('id') id: string,

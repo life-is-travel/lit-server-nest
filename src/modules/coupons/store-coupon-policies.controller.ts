@@ -27,6 +27,7 @@ import {
   UpdateCouponPolicyDto,
 } from './dto/coupon.dto';
 import { CouponPolicyService } from './services/coupon-policy.service';
+import { StaffAllowed } from '../auth/decorators/staff-allowed.decorator';
 
 @ApiTags('Store Coupon Policies')
 @ApiBearerAuth()
@@ -48,6 +49,7 @@ export class StoreCouponPoliciesController {
   @Get()
   @ApiOperation({ summary: '매장의 쿠폰 발급 정책 목록을 조회합니다.' })
   @ApiOkResponse({ type: [CouponPolicyResponseDto] })
+  @StaffAllowed()
   listPolicies(
     @CurrentStoreId() storeId: string,
     @Query() query: ListCouponPoliciesQueryDto,
@@ -58,6 +60,7 @@ export class StoreCouponPoliciesController {
   @Get(':id')
   @ApiOperation({ summary: '매장의 쿠폰 발급 정책 상세를 조회합니다.' })
   @ApiOkResponse({ type: CouponPolicyResponseDto })
+  @StaffAllowed()
   getPolicy(@CurrentStoreId() storeId: string, @Param('id') policyId: string) {
     return this.couponPolicyService.getPolicy(storeId, policyId);
   }

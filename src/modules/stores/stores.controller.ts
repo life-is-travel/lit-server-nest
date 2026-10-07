@@ -15,7 +15,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { CurrentStoreId } from '../auth/decorators/current-store.decorator';
+import {
+  CurrentStore,
+  CurrentStoreId,
+} from '../auth/decorators/current-store.decorator';
 import { AuthThrottlerGuard } from '../auth/guards/auth-throttler.guard';
 import { StoreAuthGuard } from '../auth/guards/store-auth.guard';
 import {
@@ -36,6 +39,9 @@ import { StorePinService } from './services/store-pin.service';
 import { StoreSettingsService } from './services/store-settings.service';
 import { StoreStatusService } from './services/store-status.service';
 import { StoresService } from './stores.service';
+import { StaffAllowed } from '../auth/decorators/staff-allowed.decorator';
+import type { AuthenticatedStore } from '../auth/guards/store-auth.guard';
+import { hideOwnerPrivateFields } from '../auth/utils/staff-view.util';
 
 @ApiTags('Stores')
 @ApiBearerAuth()
@@ -52,8 +58,13 @@ export class StoresController {
   @Get()
   @ApiOperation({ summary: '인증된 매장의 기본 정보를 조회합니다.' })
   @ApiOkResponse({ type: StoreProfileResponseDto })
-  getProfile(@CurrentStoreId() storeId: string) {
-    return this.storesService.getProfile(storeId);
+  @StaffAllowed()
+  async getProfile(
+    @CurrentStoreId() storeId: string,
+    @CurrentStore() actor?: AuthenticatedStore,
+  ) {
+    const profile = await this.storesService.getProfile(storeId);
+    return hideOwnerPrivateFields(actor, profile);
   }
 
   @Put()
@@ -69,6 +80,7 @@ export class StoresController {
   @Get('status')
   @ApiOperation({ summary: '매장 영업 상태를 조회합니다.' })
   @ApiOkResponse()
+  @StaffAllowed()
   getStatus(@CurrentStoreId() storeId: string) {
     return this.storeStatusService.getStatus(storeId);
   }
@@ -76,6 +88,7 @@ export class StoresController {
   @Put('status')
   @ApiOperation({ summary: '매장 영업 상태를 변경합니다.' })
   @ApiOkResponse()
+  @StaffAllowed()
   updateStatus(
     @CurrentStoreId() storeId: string,
     @Body() dto: UpdateStoreStatusDto,
@@ -87,6 +100,7 @@ export class StoresController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '매장 상태를 영업중으로 변경합니다.' })
   @ApiOkResponse()
+  @StaffAllowed()
   openStore(@CurrentStoreId() storeId: string) {
     return this.storeStatusService.openStore(storeId);
   }
@@ -95,6 +109,7 @@ export class StoresController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '매장 상태를 영업 종료로 변경합니다.' })
   @ApiOkResponse()
+  @StaffAllowed()
   closeStore(@CurrentStoreId() storeId: string) {
     return this.storeStatusService.closeStore(storeId);
   }
@@ -102,6 +117,7 @@ export class StoresController {
   @Get('settings')
   @ApiOperation({ summary: '매장 설정을 조회합니다.' })
   @ApiOkResponse({ type: StoreSettingsResponseDto })
+  @StaffAllowed()
   getSettings(@CurrentStoreId() storeId: string) {
     return this.storeSettingsService.getSettings(storeId);
   }

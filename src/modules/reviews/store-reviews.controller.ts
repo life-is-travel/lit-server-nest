@@ -22,6 +22,7 @@ import {
   RespondToReviewDto,
 } from './dto/store-review.dto';
 import { StoreReviewService } from './services/store-review.service';
+import { StaffAllowed } from '../auth/decorators/staff-allowed.decorator';
 
 @ApiTags('Store Reviews')
 @ApiBearerAuth()
@@ -33,6 +34,7 @@ export class StoreReviewsController {
   @Get()
   @ApiOperation({ summary: '인증 매장의 리뷰 목록 (lit-store 앱 계약)' })
   @ApiOkResponse()
+  @StaffAllowed()
   listReviews(
     @CurrentStoreId() storeId: string,
     @Query() query: ListStoreReviewsQueryDto,
@@ -43,6 +45,7 @@ export class StoreReviewsController {
   @Get('statistics')
   @ApiOperation({ summary: '인증 매장의 리뷰 통계' })
   @ApiOkResponse()
+  @StaffAllowed()
   getStatistics(@CurrentStoreId() storeId: string) {
     return this.storeReviewService.getStatistics(storeId);
   }
