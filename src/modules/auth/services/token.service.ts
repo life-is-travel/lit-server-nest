@@ -23,7 +23,12 @@ export class TokenService {
 
   generateAccessToken(storeId: string, email: string): string {
     return this.jwtService.sign(
-      { storeId, email, type: 'access' } satisfies StoreAccessTokenPayload,
+      {
+        storeId,
+        email,
+        role: 'owner',
+        type: 'access',
+      } satisfies StoreAccessTokenPayload,
       {
         secret: this.configService.getOrThrow<string>(
           'JWT_ACCESS_TOKEN_SECRET',
@@ -37,7 +42,48 @@ export class TokenService {
 
   generateRefreshToken(storeId: string, email: string): string {
     return this.jwtService.sign(
-      { storeId, email, type: 'refresh' } satisfies StoreRefreshTokenPayload,
+      {
+        storeId,
+        email,
+        role: 'owner',
+        type: 'refresh',
+      } satisfies StoreRefreshTokenPayload,
+      {
+        secret: this.configService.getOrThrow<string>(
+          'JWT_REFRESH_TOKEN_SECRET',
+        ),
+        expiresIn: this.getStoreRefreshTokenExpiresInSeconds(),
+      },
+    );
+  }
+
+  generateStaffAccessToken(storeId: string, staffId: string): string {
+    return this.jwtService.sign(
+      {
+        storeId,
+        staffId,
+        role: 'staff',
+        type: 'access',
+      } satisfies StoreAccessTokenPayload,
+      {
+        secret: this.configService.getOrThrow<string>(
+          'JWT_ACCESS_TOKEN_SECRET',
+        ),
+        expiresIn: toSeconds(
+          this.configService.getOrThrow<string>('JWT_ACCESS_TOKEN_EXPIRES_IN'),
+        ),
+      },
+    );
+  }
+
+  generateStaffRefreshToken(storeId: string, staffId: string): string {
+    return this.jwtService.sign(
+      {
+        storeId,
+        staffId,
+        role: 'staff',
+        type: 'refresh',
+      } satisfies StoreRefreshTokenPayload,
       {
         secret: this.configService.getOrThrow<string>(
           'JWT_REFRESH_TOKEN_SECRET',
@@ -126,15 +172,22 @@ export class TokenService {
   }
 
   verifyAccessToken(token: string): StoreAccessTokenPayload {
-    const payload = this.verify<StoreAccessTokenPayload>(
-      token,
-      'JWT_ACCESS_TOKEN_SECRET',
-    );
+    const payload = this.verify<
+      Omit<StoreAccessTokenPayload, 'role'> & { role?: string }
+    >(token, 'JWT_ACCESS_TOKEN_SECRET');
+
+    // 역할이 없는 토큰은 이 변경 이전에 발급된 점주 토큰이다.
+    const role = payload.role ?? 'owner';
+    const isStaffWithoutId =
+      role === 'staff' &&
+      (typeof payload.staffId !== 'string' || payload.staffId.length === 0);
 
     if (
       payload.type !== 'access' ||
       typeof payload.storeId !== 'string' ||
-      payload.storeId.length === 0
+      payload.storeId.length === 0 ||
+      (role !== 'owner' && role !== 'staff') ||
+      isStaffWithoutId
     ) {
       throw new UnauthorizedException({
         code: 'TOKEN_INVALID',
@@ -142,7 +195,7 @@ export class TokenService {
       });
     }
 
-    return payload;
+    return { ...payload, role };
   }
 
   verifyCustomerAccessToken(token: string): CustomerAccessTokenPayload {
@@ -251,7 +304,7 @@ export class TokenService {
     );
   }
 
-  /** 점주 refresh 토큰 만료 시각. 고객·관리자는 getRefreshTokenExpiresAt을 쓴다. */
+  /** 점주·직원 refresh 토큰 만료 시각. 고객·관리자는 getRefreshTokenExpiresAt을 쓴다. */
   getStoreRefreshTokenExpiresAt(): Date {
     return new Date(
       Date.now() + this.getStoreRefreshTokenExpiresInSeconds() * 1000,

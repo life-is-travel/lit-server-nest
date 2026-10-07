@@ -63,10 +63,20 @@ const createAuthService = () => {
     notifications: {
       deleteMany: jest.fn(),
     },
+    store_staff: {
+      updateMany: jest.fn(),
+    },
+    store_staff_invite_codes: {
+      updateMany: jest.fn(),
+    },
   };
   const prisma = {
     stores: {
       findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    store_staff: {
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     refresh_tokens: {
@@ -95,6 +105,7 @@ const createAuthService = () => {
   const tokenService = {
     generateAccessToken: jest.fn().mockReturnValue('access-token'),
     generateRefreshToken: jest.fn().mockReturnValue('refresh-token'),
+    generateStaffAccessToken: jest.fn().mockReturnValue('staff-access-token'),
     getStoreRefreshTokenExpiresAt: jest
       .fn()
       .mockReturnValue(new Date('2026-02-01T00:00:00.000Z')),
@@ -164,6 +175,7 @@ describe('AuthService', () => {
       refreshToken: 'refresh-token',
       expiresIn: 3600,
       user_info: {
+        role: 'owner',
         id: 'store_1',
         storeId: 'store_1',
         email: 'store@example.com',
@@ -369,6 +381,15 @@ describe('AuthService', () => {
           closed_at: expect.any(Date),
         }),
       });
+      // 직원 세션은 refresh_tokens 전체 삭제에 포함되고, 직원·미사용 초대코드도 정리한다.
+      expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
+        where: { store_id: 'store_1', status: 'active' },
+        data: expect.objectContaining({ status: 'revoked' }),
+      });
+      expect(tx.store_staff_invite_codes.updateMany).toHaveBeenCalledWith({
+        where: { store_id: 'store_1', used_at: null, revoked_at: null },
+        data: { revoked_at: expect.any(Date) },
+      });
       expect(result).toEqual({ message: '회원탈퇴가 완료되었습니다.' });
     });
 
@@ -448,6 +469,86 @@ describe('AuthService', () => {
     expect(result).toEqual({
       token: 'access-token',
       expiresIn: 3600,
+    });
+  });
+  describe('refresh — 직원 세션', () => {
+    const staffRow = {
+      store_id: 'store_1',
+      staff_id: 'staff_1',
+      expires_at: new Date(Date.now() + 60_000),
+    };
+
+    it('issues a staff access token and touches last_active_at for an active staff', async () => {
+      const { service, prisma, tokenService } = createAuthService();
+      tokenService.verifyRefreshToken.mockReturnValue({
+        storeId: 'store_1',
+        staffId: 'staff_1',
+        role: 'staff',
+        type: 'refresh',
+      });
+      prisma.refresh_tokens.findFirst.mockResolvedValue(staffRow);
+      prisma.store_staff.findFirst.mockResolvedValue({ id: 'staff_1' });
+
+      const result = await service.refresh({ refreshToken: 'staff-refresh' });
+
+      expect(prisma.store_staff.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'staff_1',
+          store_id: 'store_1',
+          status: 'active',
+          stores: { closed_at: null },
+        },
+        select: { id: true },
+      });
+      expect(tokenService.generateStaffAccessToken).toHaveBeenCalledWith(
+        'store_1',
+        'staff_1',
+      );
+      expect(prisma.store_staff.update).toHaveBeenCalledWith({
+        where: { id: 'staff_1' },
+        data: { last_active_at: expect.any(Date) },
+      });
+      expect(result).toEqual({ token: 'staff-access-token', expiresIn: 3600 });
+    });
+
+    it('rejects refresh for a revoked staff or withdrawn store', async () => {
+      const { service, prisma, tokenService } = createAuthService();
+      tokenService.verifyRefreshToken.mockReturnValue({
+        storeId: 'store_1',
+        staffId: 'staff_1',
+        role: 'staff',
+        type: 'refresh',
+      });
+      prisma.refresh_tokens.findFirst.mockResolvedValue(staffRow);
+      prisma.store_staff.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.refresh({ refreshToken: 'staff-refresh' }),
+      ).rejects.toMatchObject({ response: { code: 'STAFF_REVOKED' } });
+      expect(tokenService.generateStaffAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('does not use a staff refresh row for the owner path', async () => {
+      const { service, prisma, tokenService } = createAuthService();
+      tokenService.verifyRefreshToken.mockReturnValue({
+        storeId: 'store_1',
+        email: 'store@example.com',
+        type: 'refresh',
+      });
+      prisma.refresh_tokens.findFirst.mockResolvedValue({
+        store_id: 'store_1',
+        staff_id: null,
+        expires_at: new Date(Date.now() + 60_000),
+      });
+      prisma.stores.findUnique.mockResolvedValue({
+        id: 'store_1',
+        email: 'store@example.com',
+      });
+
+      await service.refresh({ refreshToken: 'refresh-token' });
+
+      expect(prisma.store_staff.findFirst).not.toHaveBeenCalled();
+      expect(tokenService.generateStaffAccessToken).not.toHaveBeenCalled();
     });
   });
 });

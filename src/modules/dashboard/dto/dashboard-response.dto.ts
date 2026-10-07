@@ -20,11 +20,11 @@ export class DashboardSummaryResponseDto {
   @ApiProperty()
   todayReservations!: number;
 
-  @ApiProperty()
-  totalRevenue!: number;
+  @ApiProperty({ nullable: true, description: '직원(F-024)에게는 null' })
+  totalRevenue!: number | null;
 
-  @ApiProperty()
-  todayRevenue!: number;
+  @ApiProperty({ nullable: true, description: '직원(F-024)에게는 null' })
+  todayRevenue!: number | null;
 
   @ApiProperty()
   totalStorages!: number;
@@ -122,8 +122,8 @@ export class DashboardRealtimeResponseDto {
   @ApiProperty()
   pendingReservations!: number;
 
-  @ApiProperty()
-  todayRevenue!: number;
+  @ApiProperty({ nullable: true, description: '직원(F-024)에게는 null' })
+  todayRevenue!: number | null;
 
   @ApiProperty()
   occupiedStorages!: number;

@@ -337,16 +337,54 @@ model push_subscriptions {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model refresh_tokens {
-  id         Int       @id @default(autoincrement())
-  store_id   String    @db.VarChar(255)
-  token      String    @db.VarChar(500)
-  expires_at DateTime  @db.Timestamp(0)
-  created_at DateTime? @default(now()) @db.Timestamp(0)
-  stores     stores    @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "refresh_tokens_ibfk_1")
+  id          Int          @id @default(autoincrement())
+  store_id    String       @db.VarChar(255)
+  /// NULL이면 점주 세션, 값이 있으면 그 직원(F-024)의 세션
+  staff_id    String?      @db.VarChar(255)
+  token       String       @db.VarChar(500)
+  expires_at  DateTime     @db.Timestamp(0)
+  created_at  DateTime?    @default(now()) @db.Timestamp(0)
+  stores      stores       @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "refresh_tokens_ibfk_1")
+  store_staff store_staff? @relation(fields: [staff_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "refresh_tokens_staff_fk")
 
   @@index([expires_at], map: "idx_expires_at")
   @@index([store_id], map: "idx_store_id")
+  @@index([staff_id], map: "idx_refresh_staff_id")
   @@index([token(length: 255)], map: "idx_token")
+}
+
+/// 점주가 초대코드로 등록한 직원(F-024)
+model store_staff {
+  id                       String                     @id @db.VarChar(255)
+  store_id                 String                     @db.VarChar(255)
+  name                     String                     @db.VarChar(30)
+  status                   store_staff_status         @default(active)
+  joined_at                DateTime?                  @db.DateTime(0)
+  last_active_at           DateTime?                  @db.DateTime(0)
+  revoked_at               DateTime?                  @db.DateTime(0)
+  created_at               DateTime                   @default(now()) @db.DateTime(0)
+  updated_at               DateTime                   @default(now()) @db.DateTime(0)
+  stores                   stores                     @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_staff_store_fk")
+  store_staff_invite_codes store_staff_invite_codes[]
+  refresh_tokens           refresh_tokens[]
+
+  @@index([store_id, status], map: "idx_store_staff_store_status")
+}
+
+/// 직원 초대코드. 평문은 저장하지 않고 SHA-256 해시만 저장한다(F-024).
+model store_staff_invite_codes {
+  id          Int         @id @default(autoincrement())
+  staff_id    String      @db.VarChar(255)
+  store_id    String      @db.VarChar(255)
+  code_hash   String      @unique(map: "uniq_staff_invite_code_hash") @db.Char(64)
+  expires_at  DateTime    @db.DateTime(0)
+  used_at     DateTime?   @db.DateTime(0)
+  revoked_at  DateTime?   @db.DateTime(0)
+  created_at  DateTime    @default(now()) @db.DateTime(0)
+  store_staff store_staff @relation(fields: [staff_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_staff_invite_codes_staff_fk")
+
+  @@index([staff_id], map: "idx_staff_invite_staff_id")
+  @@index([store_id], map: "idx_staff_invite_store_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -705,6 +743,7 @@ model stores {
   store_settings            store_settings?
   store_settlement_accounts store_settlement_accounts?
   store_status              store_status[]
+  store_staff               store_staff[]
 
   @@index([business_number], map: "idx_business_number")
   @@index([email], map: "idx_email")
@@ -947,4 +986,9 @@ enum feedbacks_status {
   inProgress
   shipped
   rejected
+}
+
+enum store_staff_status {
+  active
+  revoked
 }

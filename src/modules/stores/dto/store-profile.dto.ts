@@ -21,8 +21,8 @@ export class StoreProfileResponseDto {
   @ApiProperty()
   id!: string;
 
-  @ApiProperty()
-  email!: string;
+  @ApiProperty({ nullable: true, description: '직원(F-024)에게는 null' })
+  email!: string | null;
 
   @ApiProperty()
   businessName!: string;
