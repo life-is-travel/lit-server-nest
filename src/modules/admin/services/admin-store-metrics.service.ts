@@ -77,7 +77,7 @@ export class AdminStoreMetricsService {
     query: AdminStoreListQueryDto,
   ): Promise<AdminStoreListResponseDto> {
     const range = getKstDateRange(query, ADMIN_DEFAULT_RANGE_DAYS);
-    const storeWhere = this.buildStoreWhere(query);
+    const { where: storeWhere, filtered } = this.buildStoreWhere(query);
     const stores = await this.prisma.stores.findMany({
       where: storeWhere,
       select: ADMIN_STORE_SELECT,
@@ -87,7 +87,7 @@ export class AdminStoreMetricsService {
       this.adminStoreService.getLatestStatuses(storeIds),
       this.aggregateByStore(range, {
         // 필터가 없으면 store_id IN (...)을 생략해 전체 매장을 한 번에 집계한다.
-        storeIds: storeWhere ? storeIds : undefined,
+        storeIds: filtered ? storeIds : undefined,
         includeLocale: true,
       }),
     ]);
@@ -258,10 +258,12 @@ export class AdminStoreMetricsService {
     return { inputs, localeBreakdown };
   }
 
-  private buildStoreWhere(
-    query: AdminStoreListQueryDto,
-  ): Prisma.storesWhereInput | undefined {
-    const conditions: Prisma.storesWhereInput[] = [];
+  private buildStoreWhere(query: AdminStoreListQueryDto): {
+    where: Prisma.storesWhereInput;
+    filtered: boolean;
+  } {
+    // 탈퇴한 매장(closed_at)은 항상 제외한다. 사용자 필터가 없으면 집계는 전체 매장을 대상으로 한다.
+    const conditions: Prisma.storesWhereInput[] = [{ closed_at: null }];
 
     if (query.search) {
       // MySQL collation이 대소문자를 무시하므로 mode: 'insensitive'는 쓰지 않는다.
@@ -276,7 +278,7 @@ export class AdminStoreMetricsService {
       });
     }
 
-    return conditions.length > 0 ? { AND: conditions } : undefined;
+    return { where: { AND: conditions }, filtered: conditions.length > 1 };
   }
 
   /**

@@ -693,6 +693,7 @@ model stores {
   last_login_at             DateTime?                  @db.DateTime(0)
   login_count               Int                        @default(0)
   login_locked_until        DateTime?                  @db.DateTime(0)
+  closed_at                 DateTime?                  @db.DateTime(0)
   daily_statistics          daily_statistics[]
   notifications             notifications[]
   payments                  payments[]

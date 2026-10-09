@@ -104,6 +104,14 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 로그인(`login`)에 성공하면 매장의 `last_login_at`이 현재 시각으로 갱신되고, 실패 카운트(`login_count`)와 잠금(`login_locked_until`)이 초기화된다.
 - ✅ 로그인 비밀번호를 5회 연속 틀리면 계정이 10분간 잠기고(`login_count`/`login_locked_until`), 잠금 해제 시각 전까지는 비밀번호가 맞아도 로그인이 거부된다(PIN 잠금과 동일 정책).
 
+**회원탈퇴 유저 스토리**: 점주로서 서비스를 더 쓰지 않을 때, 앱에서 직접 계정과 개인정보를 삭제하고 매장을 고객 앱에서 내린다(스토어 계정 삭제 정책 대응).
+
+- ✅ `POST /api/auth/withdraw`(점주 JWT 필수, 본문 `{ password }`)로 탈퇴한다. 인증 API와 같은 레이트리밋(15분 5회)이 적용된다.
+- ✅ 비밀번호가 일치하지 않으면 401 `INVALID_CURRENT_PASSWORD`로 거절하며 어떤 데이터도 바뀌지 않는다. 점주가 존재하지 않거나 이미 탈퇴했으면 404 `STORE_NOT_FOUND`다.
+- ✅ 진행 중 예약(`pending`·`pending_approval`·`confirmed`·`in_progress`)이 1건이라도 있으면 409 `ACTIVE_RESERVATIONS_EXIST`(`details.count` = 해당 예약 행 수)로 거절하며 어떤 데이터도 바뀌지 않는다.
+- ✅ 성공하면 한 트랜잭션에서 다음을 처리한다. **삭제**: refresh 토큰 전체, 정산 계좌(`store_settlement_accounts`), 매장 설정·운영시간(`store_settings`, `store_operating_hours`), 점주 알림(`notifications`). **익명화**(`stores` 행은 유지): `email`→`withdrawn_<id>@withdrawn.invalid`, `password_hash`→로그인이 불가능한 무작위 해시, `business_name`→`폐점한 매장`, 그 밖의 개인·사업자·위치 정보(PIN·전화번호들·SMS 수신·사업자번호·대표자명·주소·좌표·소개·프로필 이미지·slug)는 비우고, `closed_at`에 탈퇴 시각을 기록한다. **보존**: 예약·결제·정산서·통계·리뷰·보관함(거래기록 보관 의무 대상 및 고객 데이터).
+- ✅ 탈퇴 후 이전 이메일·사업자번호로 **새로 가입**할 수 있다. 이전 계정으로는 로그인·토큰 갱신이 불가능하다. 이미 발급된 access 토큰은 만료(1시간)까지 서명상 유효하지만 refresh 토큰이 없어 연장되지 않는다.
+
 ### F-002 고객 소셜 인증 (`api/customer/auth`)
 **유저 스토리**: 고객으로서 빠르게 시작하기 위해 카카오 소셜 로그인으로 가입·로그인한다.
 
@@ -141,6 +149,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 목록은 키워드 검색과 위치 검색(`lat`/`lng`/`range`)을 지원한다.
 - ✅ 노출 필드는 고객 안전 정보로 축약되며 `store_phone_number`만 포함하고 점주 `phone_number`는 포함하지 않는다.
 - ✅ 상세 조회가 동작한다.
+- ✅ 탈퇴한 매장(`closed_at` 있음, F-001)은 목록·상세 모두에서 제외된다(상세는 404 `NOT_FOUND`).
 
 ### F-006 비회원 예약 (`api/guest/reservations`)
 **유저 스토리**: 비회원으로서 가입 없이 예약하기 위해 전화번호로 예약을 생성·조회·취소한다.
@@ -152,6 +161,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ `/:id/cancel` 취소는 전화번호 검증을 통과해야 동작한다.
 - ✅ `cleanup`은 미결제 상태로 30분(TTL) 경과한 비회원 예약을 정리한다. 자동 승인되어 `confirmed`가 된 미결제 예약도 대상이며, 취소 시 점유 중이던 보관함을 반납한다.
 - ✅ 비회원 예약 API는 기본 분당 10회, cleanup 3회, availability/상세 30회로 제한된다.
+- ✅ 탈퇴한 매장(F-001)에는 예약을 만들 수 없다(비회원·고객 모두 404 `STORE_NOT_FOUND`).
 
 ### F-007 고객 예약 (`api/customer/reservations`)
 **유저 스토리**: 로그인 고객으로서 내 예약을 관리하기 위해 예약을 생성·조회·체크아웃한다.
@@ -288,6 +298,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 상태별 건수는 `pendingCount`(`pending`+`pending_approval`), `activeCount`(`confirmed`+`in_progress`), `completedCount`, `cancelledCount`, `rejectedCount`, `noShowCount`이며 불변식 `reservationCount = 여섯 값의 합`이 항상 성립한다.
 - ✅ `noShowRate` = `noShowCount / (completedCount + noShowCount) × 100`, `completionRate` = `completedCount / reservationCount × 100`, `cancellationRate` = `(cancelledCount + rejectedCount) / reservationCount × 100`. 소수 1자리로 반올림하고 분모가 0이면 `null`이다.
 - ✅ 정산 테이블(`settlement_*`)과 `daily_statistics`는 읽지 않는다.
+- ✅ 탈퇴한 매장(F-001, `closed_at` 있음)은 목록과 그 위에서 계산되는 요약·정렬 대상에서 제외된다.
 
 > ⚠️ **한계(명시)**: 점주가 노쇼 처리하지 않은 미방문 예약은 자동 완료 크론(6시간 유예)에 의해 `completed`가 되어 `noShowRate`가 과소 집계될 수 있다. 부분 환불 금액 컬럼이 없어 `refundedAmount`는 결제 전액 기준이다. 이용일(`start_time`) 기준 보기는 v2 후보(`dateBasis` 파라미터)로 유보한다. 매장 단위 비율은 예약이 적은 매장에서 표본이 작아 변동이 크므로(예: 4건 중 1건 노쇼 = 25%) 응답은 건수를 함께 주며, 표본 부족 표시는 클라이언트가 한다. 직전 기간 대비 증감·순위 번호는 서버가 계산하지 않고 클라이언트가 같은 API를 기간만 바꿔 호출해 계산한다. 휴면·급감 알림, 요일·시간대 분포, 승인 소요시간 등 점주 운영 데이터가 쌓인 뒤 필요한 판단형 지표는 v2 후보로 유보한다.
 

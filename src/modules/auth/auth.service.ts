@@ -1,10 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, store_status_status, stores } from '@prisma/client';
+import {
+  Prisma,
+  reservations_status,
+  store_status_status,
+  stores,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/database/prisma.service';
 import {
@@ -17,6 +23,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendEmailVerificationDto } from './dto/send-email-verification.dto';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { WithdrawDto } from './dto/withdraw.dto';
 import { EmailVerificationService } from './services/email-verification.service';
 import { MailService } from './services/mail.service';
 import { PasswordService } from './services/password.service';
@@ -40,6 +47,21 @@ type LogoutResponse = {
 type ChangePasswordResponse = {
   message: string;
 };
+
+type WithdrawResponse = {
+  message: string;
+};
+
+// 탈퇴를 막는 진행 중 예약 상태. 이 상태의 예약은 고객 짐/결제가 걸려 있다.
+const ACTIVE_RESERVATION_STATUSES: reservations_status[] = [
+  reservations_status.pending,
+  reservations_status.pending_approval,
+  reservations_status.confirmed,
+  reservations_status.in_progress,
+];
+
+const WITHDRAWN_STORE_NAME = '폐점한 매장';
+const WITHDRAWN_EMAIL_DOMAIN = 'withdrawn.invalid';
 
 const MAX_LOGIN_FAILURES = 5;
 const LOGIN_LOCK_MINUTES = 10;
@@ -293,6 +315,98 @@ export class AuthService {
 
     return {
       message: '비밀번호가 변경되었습니다.',
+    };
+  }
+
+  /**
+   * 점주 회원탈퇴. 거래기록 보관 의무(예약·결제·정산서)와 고객 데이터(리뷰)는 남기고
+   * 점주 개인·사업자 정보만 비우는 익명화 방식이다. stores 행은 FK 때문에 삭제하지 않는다.
+   */
+  async withdraw(storeId: string, dto: WithdrawDto): Promise<WithdrawResponse> {
+    const store = await this.prisma.stores.findUnique({
+      where: { id: storeId },
+      select: { id: true, password_hash: true, closed_at: true },
+    });
+
+    if (!store || store.closed_at) {
+      throw new NotFoundException({
+        code: 'STORE_NOT_FOUND',
+        message: '점포를 찾을 수 없습니다.',
+      });
+    }
+
+    const passwordMatched = await this.passwordService.compare(
+      dto.password,
+      store.password_hash,
+    );
+
+    if (!passwordMatched) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CURRENT_PASSWORD',
+        message: '현재 비밀번호가 일치하지 않습니다.',
+      });
+    }
+
+    // 로그인할 수 없는 무작위 해시. 원래 비밀번호 해시는 보존하지 않는다.
+    const unusablePasswordHash = await this.passwordService.hash(randomUUID());
+
+    await this.prisma.$transaction(async (tx) => {
+      // 예약 생성과의 경쟁을 막기 위해 검사도 트랜잭션 안에서 한다.
+      const activeCount = await tx.reservations.count({
+        where: {
+          store_id: store.id,
+          status: { in: ACTIVE_RESERVATION_STATUSES },
+        },
+      });
+
+      if (activeCount > 0) {
+        throw new ConflictException({
+          code: 'ACTIVE_RESERVATIONS_EXIST',
+          message: '진행 중인 예약이 있어 탈퇴할 수 없습니다.',
+          details: { count: activeCount },
+        });
+      }
+
+      const where = { store_id: store.id };
+      await tx.refresh_tokens.deleteMany({ where });
+      await tx.store_settlement_accounts.deleteMany({ where });
+      await tx.store_settings.deleteMany({ where });
+      await tx.store_operating_hours.deleteMany({ where });
+      await tx.notifications.deleteMany({ where });
+
+      const now = new Date();
+      await tx.stores.update({
+        where: { id: store.id },
+        data: {
+          email: `withdrawn_${store.id}@${WITHDRAWN_EMAIL_DOMAIN}`,
+          password_hash: unusablePasswordHash,
+          business_name: WITHDRAWN_STORE_NAME,
+          store_pin_hash: null,
+          store_pin_updated_at: null,
+          store_pin_failed_count: 0,
+          store_pin_locked_until: null,
+          phone_number: null,
+          store_phone_number: null,
+          notification_phone: null,
+          notification_phones: Prisma.DbNull,
+          wants_sms_notification: false,
+          business_number: null,
+          representative_name: null,
+          address: null,
+          detail_address: null,
+          latitude: null,
+          longitude: null,
+          description: null,
+          profile_image_url: null,
+          slug: null,
+          closed_at: now,
+          updated_at: now,
+        },
+      });
+    });
+
+    return {
+      message: '회원탈퇴가 완료되었습니다.',
     };
   }
 

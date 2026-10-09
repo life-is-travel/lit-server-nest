@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { stores } from '@prisma/client';
 import { AuthService } from './auth.service';
 
@@ -42,6 +46,21 @@ const createAuthService = () => {
       update: jest.fn(),
     },
     refresh_tokens: {
+      deleteMany: jest.fn(),
+    },
+    reservations: {
+      count: jest.fn().mockResolvedValue(0),
+    },
+    store_settlement_accounts: {
+      deleteMany: jest.fn(),
+    },
+    store_settings: {
+      deleteMany: jest.fn(),
+    },
+    store_operating_hours: {
+      deleteMany: jest.fn(),
+    },
+    notifications: {
       deleteMany: jest.fn(),
     },
   };
@@ -284,6 +303,126 @@ describe('AuthService', () => {
         newPassword: 'newPassword123',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('withdraw', () => {
+    const withdrawableStore = {
+      id: 'store_1',
+      password_hash: 'old-hash',
+      closed_at: null,
+    };
+
+    it('anonymizes the store, deletes personal data and keeps the row', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+
+      prisma.stores.findUnique.mockResolvedValue(withdrawableStore);
+      passwordService.compare.mockResolvedValue(true);
+      passwordService.hash.mockResolvedValue('unusable-hash');
+
+      const result = await service.withdraw('store_1', {
+        password: 'currentPassword123',
+      });
+
+      expect(passwordService.compare).toHaveBeenCalledWith(
+        'currentPassword123',
+        'old-hash',
+      );
+      expect(tx.reservations.count).toHaveBeenCalledWith({
+        where: {
+          store_id: 'store_1',
+          status: {
+            in: ['pending', 'pending_approval', 'confirmed', 'in_progress'],
+          },
+        },
+      });
+      for (const table of [
+        tx.refresh_tokens,
+        tx.store_settlement_accounts,
+        tx.store_settings,
+        tx.store_operating_hours,
+        tx.notifications,
+      ]) {
+        expect(table.deleteMany).toHaveBeenCalledWith({
+          where: { store_id: 'store_1' },
+        });
+      }
+      expect(tx.stores.update).toHaveBeenCalledWith({
+        where: { id: 'store_1' },
+        data: expect.objectContaining({
+          email: 'withdrawn_store_1@withdrawn.invalid',
+          password_hash: 'unusable-hash',
+          business_name: '폐점한 매장',
+          store_pin_hash: null,
+          phone_number: null,
+          store_phone_number: null,
+          notification_phone: null,
+          wants_sms_notification: false,
+          business_number: null,
+          representative_name: null,
+          address: null,
+          detail_address: null,
+          latitude: null,
+          longitude: null,
+          description: null,
+          profile_image_url: null,
+          slug: null,
+          closed_at: expect.any(Date),
+        }),
+      });
+      expect(result).toEqual({ message: '회원탈퇴가 완료되었습니다.' });
+    });
+
+    it('rejects withdrawal when the password does not match', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+
+      prisma.stores.findUnique.mockResolvedValue(withdrawableStore);
+      passwordService.compare.mockResolvedValue(false);
+
+      await expect(
+        service.withdraw('store_1', { password: 'wrong-password' }),
+      ).rejects.toMatchObject({
+        response: { code: 'INVALID_CURRENT_PASSWORD' },
+      });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.stores.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks withdrawal while active reservations exist', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+
+      prisma.stores.findUnique.mockResolvedValue(withdrawableStore);
+      passwordService.compare.mockResolvedValue(true);
+      tx.reservations.count.mockResolvedValue(3);
+
+      const attempt = service.withdraw('store_1', { password: 'pw' });
+
+      await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+      await expect(attempt).rejects.toMatchObject({
+        response: {
+          code: 'ACTIVE_RESERVATIONS_EXIST',
+          details: { count: 3 },
+        },
+      });
+      expect(tx.stores.update).not.toHaveBeenCalled();
+      expect(tx.refresh_tokens.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects withdrawal for an unknown or already withdrawn store', async () => {
+      const { service, prisma } = createAuthService();
+
+      prisma.stores.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.withdraw('store_unknown', { password: 'pw' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      prisma.stores.findUnique.mockResolvedValueOnce({
+        ...withdrawableStore,
+        closed_at: new Date('2026-10-01T00:00:00.000Z'),
+      });
+      await expect(
+        service.withdraw('store_1', { password: 'pw' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   it('refreshes an access token when the refresh token is valid', async () => {

@@ -89,6 +89,32 @@ const guestStoreRow = {
 };
 
 describe('GuestReservationService', () => {
+  it('does not resolve withdrawn stores when creating a reservation', async () => {
+    const { service, prisma } = createGuestReservationService();
+
+    prisma.stores.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createReservation({
+        storeId: 'store_withdrawn',
+        customerName: '홍길동',
+        phoneNumber: '010-1234-5678',
+        startTime: '2026-04-27T10:00:00+09:00',
+        duration: 4,
+        bagCount: 1,
+        requestedStorageType: reservations_requested_storage_type.s,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'STORE_NOT_FOUND' } });
+    expect(prisma.stores.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          closed_at: null,
+          OR: [{ id: 'store_withdrawn' }, { slug: 'store_withdrawn' }],
+        },
+      }),
+    );
+  });
+
   it('creates a guest reservation with normalized phone and payment link', async () => {
     const { service, prisma, tx, mailService } =
       createGuestReservationService();

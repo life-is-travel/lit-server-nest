@@ -41,6 +41,7 @@ export class CustomerStoresService {
     const identifier = storeId.trim();
     const store = await this.prisma.stores.findFirst({
       where: {
+        closed_at: null,
         OR: [{ id: identifier }, { slug: identifier }],
       },
       select: CUSTOMER_STORE_DETAIL_SELECT,
@@ -67,11 +68,13 @@ export class CustomerStoresService {
   private createListWhere(
     keyword: string | undefined,
   ): Prisma.storesWhereInput {
+    // 탈퇴한 매장(closed_at)은 고객에게 노출하지 않는다.
     if (!keyword) {
-      return {};
+      return { closed_at: null };
     }
 
     return {
+      closed_at: null,
       OR: [
         { business_name: { contains: keyword } },
         { address: { contains: keyword } },
