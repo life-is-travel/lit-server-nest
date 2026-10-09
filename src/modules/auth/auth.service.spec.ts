@@ -95,7 +95,7 @@ const createAuthService = () => {
   const tokenService = {
     generateAccessToken: jest.fn().mockReturnValue('access-token'),
     generateRefreshToken: jest.fn().mockReturnValue('refresh-token'),
-    getRefreshTokenExpiresAt: jest
+    getStoreRefreshTokenExpiresAt: jest
       .fn()
       .mockReturnValue(new Date('2026-02-01T00:00:00.000Z')),
     getAccessTokenExpiresInSeconds: jest.fn().mockReturnValue(3600),
