@@ -45,14 +45,20 @@ export class QrCheckinService {
       dto.photoUrls ?? [],
     );
 
-    await this.prisma.reservations.update({
-      where: { id: reservation.id },
-      data: {
-        status: reservations_status.in_progress,
-        actual_start_time: reservation.actual_start_time ?? new Date(),
-        luggage_image_urls: photos.length ? photos : Prisma.JsonNull,
-        updated_at: new Date(),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.reservations.update({
+        where: { id: reservation.id },
+        data: {
+          status: reservations_status.in_progress,
+          actual_start_time: reservation.actual_start_time ?? new Date(),
+          luggage_image_urls: photos.length ? photos : Prisma.JsonNull,
+          updated_at: new Date(),
+        },
+      });
+      await this.reservationStorageService.occupyStorageIfAny(
+        tx,
+        reservation.storage_id,
+      );
     });
 
     const issuedCouponIds = await this.issueCheckinCouponsSafely({

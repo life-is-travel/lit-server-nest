@@ -21,6 +21,7 @@ const createService = () => {
   };
   const reservationStorageService = {
     releaseStorageIfAny: jest.fn().mockResolvedValue(undefined),
+    occupyStorageIfAny: jest.fn().mockResolvedValue(undefined),
   };
   const notificationsService = {
     notifyCheckoutReview: jest.fn(),
@@ -86,6 +87,22 @@ describe('OwnerActionsService', () => {
       }),
     );
     expect(result.status).toBe(reservations_status.in_progress);
+  });
+
+  it('checkIn은 배정된 보관함을 occupied로 바꾸고 반납하지 않는다 (PRD F-004)', async () => {
+    const { service, tx, reservationStorageService } = createService();
+    tx.reservations.findFirst.mockResolvedValue(baseRow);
+    tx.reservations.findMany.mockResolvedValue([baseRow]);
+
+    await service.checkIn('res_1');
+
+    expect(reservationStorageService.occupyStorageIfAny).toHaveBeenCalledWith(
+      tx,
+      'storage_1',
+    );
+    expect(
+      reservationStorageService.releaseStorageIfAny,
+    ).not.toHaveBeenCalled();
   });
 
   it('checkIn marks a pending-payment (현장결제) group as paid', async () => {

@@ -275,8 +275,8 @@ export class GuestReservationService {
     };
   }
 
-  // 생성된 그룹의 각 pending 행을 자동 승인한다. 타입별 가용 보관함이 없으면
-  // 해당 행만 pending으로 남기고(NO_AVAILABLE_STORAGE) 나머지는 계속 승인한다.
+  // 생성된 그룹의 각 pending 행을 자동 승인한다. 보관함은 시간 겹침 기준으로 고르고,
+  // 고를 보관함이 없어도 승인한다 — 예약은 항상 confirmed다(PRD F-004·F-006).
   private async autoApproveGroup(groupId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const rows = await tx.reservations.findMany({
@@ -287,47 +287,34 @@ export class GuestReservationService {
       });
 
       for (const row of rows) {
-        if (!row.requested_storage_type) {
-          continue;
-        }
-
-        try {
-          const storage =
-            await this.reservationStorageService.assignAvailableStorage(tx, {
+        const storage = row.requested_storage_type
+          ? await this.reservationStorageService.findStorageForReservation(tx, {
               storeId: row.store_id,
               startTime: row.start_time,
               endTime: row.end_time,
               storageType: row.requested_storage_type,
-            });
+            })
+          : null;
 
-          await tx.reservations.update({
-            where: { id: row.id },
-            data: {
-              status: reservations_status.confirmed,
-              storage_id: storage.id,
-              storage_number: storage.number,
-              confirmed_at: row.confirmed_at ?? new Date(),
-              updated_at: new Date(),
-            },
+        if (!storage) {
+          this.logger.warn({
+            event: 'guest_reservation.confirmed_without_storage',
+            reservationId: row.id,
+            storeId: row.store_id,
+            storageType: row.requested_storage_type,
           });
-        } catch (error) {
-          if (
-            error instanceof ConflictException &&
-            (error.getResponse() as { code?: string })?.code ===
-              'NO_AVAILABLE_STORAGE'
-          ) {
-            this.logger.warn({
-              event: 'guest_reservation.auto_approve_skipped',
-              reason: 'NO_AVAILABLE_STORAGE',
-              reservationId: row.id,
-              storeId: row.store_id,
-              storageType: row.requested_storage_type,
-            });
-            continue;
-          }
-
-          throw error;
         }
+
+        await tx.reservations.update({
+          where: { id: row.id },
+          data: {
+            status: reservations_status.confirmed,
+            storage_id: storage?.id ?? null,
+            storage_number: storage?.number ?? null,
+            confirmed_at: row.confirmed_at ?? new Date(),
+            updated_at: new Date(),
+          },
+        });
       }
     }, RESERVATION_TX_OPTIONS);
   }

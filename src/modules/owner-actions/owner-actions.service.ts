@@ -22,14 +22,14 @@ import {
 } from './dto/owner-action.dto';
 
 // 점주의 물리적 확인(도착/픽업)은 승인 대기 상태보다 우선한다 —
-// NO_AVAILABLE_STORAGE로 pending에 남은 멤버도 함께 전이
+// 과거 흐름에서 pending으로 남은 멤버도 함께 전이
 const CHECK_IN_FROM: reservations_status[] = [
   reservations_status.pending,
   reservations_status.pending_approval,
   reservations_status.confirmed,
 ];
 // 점주의 물리적 확인(도착/픽업)은 승인 대기 상태보다 우선한다 —
-// NO_AVAILABLE_STORAGE로 pending에 남은 멤버도 함께 전이
+// 과거 흐름에서 pending으로 남은 멤버도 함께 전이
 const CHECK_OUT_FROM: reservations_status[] = [
   reservations_status.pending,
   reservations_status.pending_approval,
@@ -70,7 +70,7 @@ export class OwnerActionsService {
           : {}),
         updated_at: new Date(),
       }),
-      { releaseStorage: false },
+      { storage: 'occupy' },
     );
     return result;
   }
@@ -91,7 +91,7 @@ export class OwnerActionsService {
           : {}),
         updated_at: now,
       }),
-      { releaseStorage: true },
+      { storage: 'release' },
     );
 
     // 점주 직접 체크아웃 → 리뷰 요청 fan-out (fire-and-forget)
@@ -114,7 +114,7 @@ export class OwnerActionsService {
     buildData: (rep: reservations) => {
       status: reservations_status;
     } & Prisma.reservationsUpdateManyMutationInput,
-    options: { releaseStorage: boolean },
+    options: { storage: 'occupy' | 'release' },
   ): Promise<{ result: OwnerActionResultDto; representative: reservations }> {
     return this.prisma.$transaction(async (tx) => {
       const { representative, members } = await this.resolveGroup(
@@ -155,8 +155,14 @@ export class OwnerActionsService {
         });
       }
 
-      if (options.releaseStorage) {
-        for (const member of members) {
+      // 체크인은 짐이 들어간 보관함을 occupied로, 체크아웃은 available로 (PRD F-004)
+      for (const member of members) {
+        if (options.storage === 'occupy') {
+          await this.reservationStorageService.occupyStorageIfAny(
+            tx,
+            member.storage_id,
+          );
+        } else {
           await this.reservationStorageService.releaseStorageIfAny(
             tx,
             member.storage_id,

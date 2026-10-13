@@ -181,7 +181,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 점주가 생성한 예약(`POST /api/reservations`)도 생성 즉시 **항상** `confirmed`가 되며 보관함은 「보관함 배정 규칙」(F-004)을 따른다.
 - ✅ `/approve`는 호환용으로 남는다(새 흐름에서 `pending`이 생기지 않음). 기존 `pending` 예약을 승인하면 같은 배정 규칙으로 보관함을 붙이고, 붙일 보관함이 없어도 `confirmed`로 승인한다.
 - ✅ `/reject` 거절, `/cancel` 취소, `/status` 상태 수정이 동작한다.
-- ✅ `/checkin` 체크인 시 짐 사진 업로드가 가능하다. `/status`로 `in_progress`가 되면 배정된 보관함을 `occupied`로 바꾼다(F-004).
+- ✅ `/checkin` 체크인 시 짐 사진 업로드가 가능하다. `/checkin`이나 `/status`로 `in_progress`가 되면 배정된 보관함을 `occupied`로 바꾼다(F-004).
 - ✅ 예약 상태는 `pending → confirmed → in_progress → completed`로 전이하며, 분기 상태는 `rejected`(점주 거절)·`cancelled`(취소)·`no_show`(노쇼: `pending/pending_approval/confirmed`에서 보관 시작 시각 경과 후에만 전이, 상세는 F-017)다.
 - ✅ 결제 상태는 `pending / paid / refunded` 중 하나다.
 - ✅ `pending_approval` 상태는 호환용으로만 존재하며 실제 흐름에서 생성되지 않는다. 단, 노쇼 전이(F-017)의 선행 상태로는 허용된다.

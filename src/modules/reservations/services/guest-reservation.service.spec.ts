@@ -1583,7 +1583,7 @@ describe('GuestReservationService 멀티타입 3종 동시 (소·중·대)', () 
     expect(tx.reservations.createMany).not.toHaveBeenCalled();
   });
 
-  it('대형 보관함만 없으면 대형 행만 접수 대기로 남고 나머지는 확정된다', async () => {
+  it('대형 보관함을 못 골라도 대형 행까지 모두 확정하고, 대형만 보관함 없이 남긴다 (PRD F-006)', async () => {
     const { service, tx } = setupThreeTypeStore();
 
     tx.reservations.findMany.mockResolvedValue([
@@ -1598,11 +1598,19 @@ describe('GuestReservationService 멀티타입 3종 동시 (소·중·대)', () 
 
     await service.createReservation(createRequest);
 
-    expect(tx.reservations.update).toHaveBeenCalledTimes(2);
-    const updatedIds = (
-      tx.reservations.update.mock.calls as Array<[{ where: { id: string } }]>
-    ).map((call) => call[0].where.id);
-    expect(updatedIds).toEqual(['res_a', 'res_b']);
+    const updates = (
+      tx.reservations.update.mock.calls as Array<
+        [{ where: { id: string }; data: Record<string, unknown> }]
+      >
+    ).map((call) => call[0]);
+    expect(updates.map((u) => u.where.id)).toEqual(['res_a', 'res_b', 'res_c']);
+    for (const update of updates) {
+      expect(update.data.status).toBe(reservations_status.confirmed);
+    }
+    expect(updates[2].data).toMatchObject({
+      storage_id: null,
+      storage_number: null,
+    });
   });
 
   it('enabled가 NULL인 규격은 켜진 것으로 보고 판매한다 (스키마 기본값과 동일)', async () => {
