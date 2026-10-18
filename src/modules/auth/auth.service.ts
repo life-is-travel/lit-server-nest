@@ -310,9 +310,10 @@ export class AuthService {
         },
       });
 
-      // 비밀번호 변경 시 기존 세션(refresh 토큰)을 모두 무효화한다.
+      // 비밀번호 변경 시 점주 세션(refresh 토큰)을 무효화한다.
+      // 직원 세션은 점주 비밀번호와 무관하므로 남긴다(F-024).
       await tx.refresh_tokens.deleteMany({
-        where: { store_id: store.id },
+        where: { store_id: store.id, staff_id: null },
       });
     });
 
@@ -378,15 +379,19 @@ export class AuthService {
       await tx.notifications.deleteMany({ where });
 
       const now = new Date();
-      // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 직원(이름 익명화)과 미사용 초대코드도 정리한다.
+      // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 남은 직원을 해제하고,
+      // 이미 해제된 직원까지 이름을 익명화한 뒤 미사용 초대코드를 폐기한다.
       await tx.store_staff.updateMany({
         where: { store_id: store.id, status: store_staff_status.active },
         data: {
-          name: WITHDRAWN_STAFF_NAME,
           status: store_staff_status.revoked,
           revoked_at: now,
           updated_at: now,
         },
+      });
+      await tx.store_staff.updateMany({
+        where: { store_id: store.id },
+        data: { name: WITHDRAWN_STAFF_NAME, updated_at: now },
       });
       await tx.store_staff_invite_codes.updateMany({
         where: { store_id: store.id, used_at: null, revoked_at: null },

@@ -257,7 +257,7 @@ describe('AuthService', () => {
     expect(prisma.stores.update).not.toHaveBeenCalled();
   });
 
-  it('changes the password and revokes existing refresh tokens', async () => {
+  it('changes the password and revokes only the owner refresh tokens', async () => {
     const { service, prisma, tx, passwordService } = createAuthService();
 
     prisma.stores.findUnique.mockResolvedValue({
@@ -280,8 +280,9 @@ describe('AuthService', () => {
       where: { id: 'store_1' },
       data: expect.objectContaining({ password_hash: 'new-hash' }),
     });
+    // 직원 세션(staff_id 있음)은 점주 비밀번호와 무관하므로 남긴다.
     expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({
-      where: { store_id: 'store_1' },
+      where: { store_id: 'store_1', staff_id: null },
     });
     expect(result).toEqual({ message: '비밀번호가 변경되었습니다.' });
   });
@@ -384,10 +385,12 @@ describe('AuthService', () => {
       // 직원 세션은 refresh_tokens 전체 삭제에 포함되고, 직원·미사용 초대코드도 정리한다.
       expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
         where: { store_id: 'store_1', status: 'active' },
-        data: expect.objectContaining({
-          status: 'revoked',
-          name: '탈퇴한 직원',
-        }),
+        data: expect.objectContaining({ status: 'revoked' }),
+      });
+      // 이미 해제된 직원까지 포함해 매장의 직원 이름을 모두 익명화한다.
+      expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
+        where: { store_id: 'store_1' },
+        data: expect.objectContaining({ name: '탈퇴한 직원' }),
       });
       expect(tx.store_staff_invite_codes.updateMany).toHaveBeenCalledWith({
         where: { store_id: 'store_1', used_at: null, revoked_at: null },
