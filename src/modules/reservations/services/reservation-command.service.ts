@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,7 +9,6 @@ import {
   Prisma,
   reservations_payment_status,
   reservations_status,
-  storages_status,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../common/database/prisma.service';
@@ -245,34 +243,26 @@ export class ReservationCommandService {
         });
       }
 
+      // 이미 붙은 보관함은 유지하고, 없으면 시간 겹침 기준으로 고른다.
+      // 고를 보관함이 없어도 승인한다(PRD F-004·F-008).
       const storage = reservation.storage_id
         ? {
             id: reservation.storage_id,
             number: reservation.storage_number,
           }
-        : await this.reservationStorageService.assignAvailableStorage(tx, {
+        : await this.reservationStorageService.findStorageForReservation(tx, {
             storeId,
             startTime: reservation.start_time,
             endTime: reservation.end_time,
             storageType: reservation.requested_storage_type,
           });
 
-      if (reservation.storage_id) {
-        await tx.storages.update({
-          where: { id: reservation.storage_id },
-          data: {
-            status: storages_status.occupied,
-            updated_at: new Date(),
-          },
-        });
-      }
-
       await tx.reservations.update({
         where: { id: reservation.id },
         data: {
           status: reservations_status.confirmed,
-          storage_id: storage.id,
-          storage_number: storage.number,
+          storage_id: storage?.id ?? null,
+          storage_number: storage?.number ?? null,
           confirmed_at: reservation.confirmed_at ?? new Date(),
           updated_at: new Date(),
         },
@@ -284,43 +274,24 @@ export class ReservationCommandService {
         storeId,
         previousStatus: reservation.status,
         nextStatus: reservations_status.confirmed,
-        storageId: storage.id,
+        storageId: storage?.id ?? null,
       });
 
       return {
         id: reservation.id,
         status: reservations_status.confirmed,
-        storageId: storage.id,
-        storageNumber: storage.number,
+        storageId: storage?.id ?? null,
+        storageNumber: storage?.number ?? null,
       };
     });
   }
 
-  // 예약 생성 직후 자동 승인한다. 가용 보관함이 없으면(NO_AVAILABLE_STORAGE)
-  // 예약을 pending으로 남기고 생성 흐름을 막지 않는다.
+  // 예약 생성 직후 자동 승인한다. 보관함이 없어도 승인되므로 예약은 항상 confirmed다.
   private async autoApproveAfterCreate(
     storeId: string,
     reservationId: string,
   ): Promise<void> {
-    try {
-      await this.approveReservation(storeId, reservationId);
-    } catch (error) {
-      if (
-        error instanceof ConflictException &&
-        (error.getResponse() as { code?: string })?.code ===
-          'NO_AVAILABLE_STORAGE'
-      ) {
-        this.logger.warn({
-          event: 'reservation.auto_approve_skipped',
-          reason: 'NO_AVAILABLE_STORAGE',
-          reservationId,
-          storeId,
-        });
-        return;
-      }
-
-      throw error;
-    }
+    await this.approveReservation(storeId, reservationId);
   }
 
   // 자동 승인으로 status/보관함이 바뀌었을 수 있으므로 최신 행을 다시 읽어 응답한다.
@@ -403,6 +374,13 @@ export class ReservationCommandService {
         );
       }
 
+      if (nextStatus === reservations_status.in_progress) {
+        await this.reservationStorageService.occupyStorageIfAny(
+          tx,
+          found.storage_id,
+        );
+      }
+
       this.logger.log({
         event: 'reservation.status_changed',
         reservationId: found.id,
@@ -463,6 +441,10 @@ export class ReservationCommandService {
           updated_at: new Date(),
         },
       });
+      await this.reservationStorageService.occupyStorageIfAny(
+        tx,
+        reservation.storage_id,
+      );
 
       return {
         id: reservation.id,

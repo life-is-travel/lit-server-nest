@@ -140,7 +140,9 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 
 - ✅ 목록은 `type`/`status` 필터로 조회된다.
 - ✅ 보관함 타입은 `s/m/l/xl/special/refrigeration` 중 하나만 허용된다.
-- ✅ 보관함 상태는 `available/occupied/maintenance` 중 하나다.
+- ✅ 보관함 상태는 `available/occupied/maintenance` 중 하나다. `occupied`는 **지금 짐이 들어 있음**(체크인~체크아웃)만 뜻하며 미래 예약 배정과는 무관하다. 예약 배정 가능 여부는 상태가 아니라 시간 겹침으로 판단한다(아래 「보관함 배정 규칙」).
+- ✅ **보관함 배정 규칙**(F-006·F-007·F-008 공통): 예약에 보관함을 붙일 때는 같은 매장·같은 배정 규격이고 `maintenance`가 아니며, 그 예약 시간대와 겹치는 활성 예약(`pending/pending_approval/confirmed/in_progress`)이 없는 보관함 중 번호순 첫 번째를 고른다. 배정해도 보관함 상태는 바꾸지 않는다. 고를 보관함이 없으면 보관함 없이(`storage_id = NULL`) 예약을 확정한다 — 판매 가능 여부는 이미 수용량(`*_max_capacity`) 검사가 판단했으므로 보관함 번호 때문에 예약을 막지 않는다.
+- ✅ 체크인(F-008 `in_progress` 전이·F-016·F-021)하면 배정된 보관함을 `occupied`로, 체크아웃·노쇼·취소·자동 완료하면 `available`로 되돌린다. 배정된 보관함이 없으면 상태 변경을 건너뛴다.
 - ✅ `(store_id, number)` 조합은 유니크하며 중복 등록 시 거부된다.
 - ✅ 삭제 요청은 물리 삭제가 아니라 `maintenance` 상태 전환으로 처리된다.
 
@@ -156,7 +158,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 **유저 스토리**: 비회원으로서 가입 없이 예약하기 위해 전화번호로 예약을 생성·조회·취소한다.
 
 - ✅ 예약 생성은 단일 타입과 멀티타입(F-009) 입력을 모두 지원한다.
-- ✅ 예약 생성 시 그룹의 각 타입 행은 즉시 자동 승인되어 `confirmed`로 전환되고 보관함이 할당된다. 특정 타입에 가용 보관함이 없으면 해당 행만 `pending`으로 남는다.
+- ✅ 예약 생성 시 그룹의 각 타입 행은 즉시 자동 승인되어 **항상** `confirmed`로 전환되고, 「보관함 배정 규칙」(F-004)으로 보관함이 붙는다. 붙일 보관함이 없어도 `pending`으로 남기지 않는다.
 - ✅ `availability`는 시간대별·타입별 가용 수량을 반환한다.
 - ✅ 목록은 `?phoneNumber=`로, 상세는 `?token=`(접근 토큰)으로 조회된다.
 - ✅ `/:id/cancel` 취소는 전화번호 검증을 통과해야 동작한다.
@@ -168,7 +170,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 **유저 스토리**: 로그인 고객으로서 내 예약을 관리하기 위해 예약을 생성·조회·체크아웃한다.
 
 - ✅ 예약 생성, 목록(페이지네이션), 상세 조회가 인증 고객에 한해 동작한다.
-- ✅ 예약 생성 시 별도 점주 승인 없이 즉시 자동 승인되어 `confirmed`로 생성되고 보관함이 할당된다. 단, 해당 시간대에 가용 보관함이 없으면 예약은 `pending`으로 남고 생성 자체는 성공한다(이후 점주가 수동 `/approve` 가능).
+- ✅ 예약 생성 시 별도 점주 승인 없이 즉시 자동 승인되어 **항상** `confirmed`로 생성되고, 「보관함 배정 규칙」(F-004)으로 보관함이 붙는다. 붙일 보관함이 없어도 `pending`으로 남기지 않는다.
 - ✅ `/:id/checkout`으로 짐 수령(체크아웃) 처리를 한다.
 - ✅ 각 예약 행에는 `groupId`가 포함된다(멀티타입은 N건 개별 노출).
 
@@ -176,10 +178,10 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 **유저 스토리**: 점주로서 예약을 처리하기 위해 승인·거절·취소·상태변경·체크인을 한다.
 
 - ✅ 목록은 `status`/`date` 필터로 조회된다.
-- ✅ 점주가 생성한 예약(`POST /api/reservations`)은 생성 즉시 자동 승인되어 `confirmed`로 생성되고 보관함이 할당된다. 가용 보관함이 없으면 `pending`으로 남고 생성은 성공한다.
-- ✅ `/approve` 승인 시 보관함이 할당된다. 자동 승인되지 못하고 `pending`으로 남은 예약을 점주가 수동 승인하는 용도로도 사용된다.
+- ✅ 점주가 생성한 예약(`POST /api/reservations`)도 생성 즉시 **항상** `confirmed`가 되며 보관함은 「보관함 배정 규칙」(F-004)을 따른다.
+- ✅ `/approve`는 호환용으로 남는다(새 흐름에서 `pending`이 생기지 않음). 기존 `pending` 예약을 승인하면 같은 배정 규칙으로 보관함을 붙이고, 붙일 보관함이 없어도 `confirmed`로 승인한다.
 - ✅ `/reject` 거절, `/cancel` 취소, `/status` 상태 수정이 동작한다.
-- ✅ `/checkin` 체크인 시 짐 사진 업로드가 가능하다.
+- ✅ `/checkin` 체크인 시 짐 사진 업로드가 가능하다. `/checkin`이나 `/status`로 `in_progress`가 되면 배정된 보관함을 `occupied`로 바꾼다(F-004).
 - ✅ 예약 상태는 `pending → confirmed → in_progress → completed`로 전이하며, 분기 상태는 `rejected`(점주 거절)·`cancelled`(취소)·`no_show`(노쇼: `pending/pending_approval/confirmed`에서 보관 시작 시각 경과 후에만 전이, 상세는 F-017)다.
 - ✅ 결제 상태는 `pending / paid / refunded` 중 하나다.
 - ✅ `pending_approval` 상태는 호환용으로만 존재하며 실제 흐름에서 생성되지 않는다. 단, 노쇼 전이(F-017)의 선행 상태로는 허용된다.
@@ -247,7 +249,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 > ⚠️ **현재 비활성**: 매장 앱(lit-store) 미배포로 컨트롤러 엔드포인트가 주석 처리되어 있음. 앱 배포 시 주석 해제로 즉시 활성화 가능.
 
 - ✅ QR 이미지는 앱 프론트엔드에서 생성하며, 예약의 `qr_code` 필드값(토큰)을 인코딩한다.
-- ✅ `POST /checkin-by-token` — 토큰으로 예약 조회 후 `in_progress`로 전이한다. 짐 사진(`photoUrls[]`)을 함께 업로드할 수 있다.
+- ✅ `POST /checkin-by-token` — 토큰으로 예약 조회 후 `in_progress`로 전이하고 배정된 보관함을 `occupied`로 바꾼다(F-004). 짐 사진(`photoUrls[]`)을 함께 업로드할 수 있다.
 - ✅ 체크인 성공 시 `checkin_completed` 트리거 쿠폰 자동 발급이 실행되며, 발급 실패는 체크인을 롤백하지 않는다.
 - ✅ `POST /checkout-by-token` — 토큰으로 예약 조회 후 `completed`로 전이하고 보관함을 해제한다.
 - ✅ 체크아웃 응답에는 고객의 미사용 쿠폰 존재 여부(`hasUnusedCoupon`)가 포함된다.
@@ -346,7 +348,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ 링크는 `www.lifeistravel.io/o/{reservationId}?t={token}`이며 `token`은 `OWNER_ACTION_SECRET`으로 예약 id를 HMAC-SHA256(base64url) 서명한 값이다. 만료·폐기가 없고 시크릿 교체로만 무효화된다. 예약 A의 토큰은 예약 B에 쓸 수 없다.
 - ✅ `OWNER_ACTION_SECRET` 미설정 시 모든 액션 라우트가 401로 잠긴다(fail-closed). 토큰 누락·불일치 → 401 `UNAUTHORIZED`.
 - ✅ `GET /:id` 요약은 대표 예약 기준 상태·시각·타입별 짐 목록·`canMarkNoShow`·`locale`·짐 사진·고객/점주 메모를 반환한다. `customerName`은 실명이 아니라 연락처 표시값(이메일 예약이면 이메일)이며 전화·이메일은 마스킹하지 않는다.
-- ✅ `POST /:id/check-in` — `pending/pending_approval/confirmed`에서 `in_progress`로 전이하고 `actual_start_time`을 기록한다. `payment_status`가 `pending`이면 현장결제 수령으로 보고 `paid`로 바꾼다.
+- ✅ `POST /:id/check-in` — `pending/pending_approval/confirmed`에서 `in_progress`로 전이하고 `actual_start_time`을 기록하며, 배정된 보관함을 `occupied`로 바꾼다(F-004). `payment_status`가 `pending`이면 현장결제 수령으로 보고 `paid`로 바꾼다.
 - ✅ `POST /:id/check-out` — `pending/pending_approval/confirmed/in_progress`에서 `completed`로 전이하고 `actual_end_time`을 기록하며 보관함을 반납한다. 결제 상태 전환은 체크인과 같고, 성공 시 고객 리뷰 요청 알림(F-020)을 보낸다.
 - ✅ `POST /:id/no-show` — F-017과 같은 규칙이며 매장 소유권 검증 대신 토큰으로 예약을 식별한다.
 - ✅ 전이는 그룹 멤버 전체에 한 트랜잭션으로 적용되며, 허용 상태가 아닌 멤버가 있거나 경합으로 갱신 행 수가 모자라면 409 `INVALID_TRANSITION`으로 전체를 거부한다. 예약 미존재 → 404 `RESERVATION_NOT_FOUND`.

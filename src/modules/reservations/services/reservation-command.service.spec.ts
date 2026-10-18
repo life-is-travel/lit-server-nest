@@ -19,6 +19,7 @@ const createReservationCommandService = () => {
     storages: {
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
   };
   const prisma = {
@@ -95,7 +96,7 @@ describe('ReservationCommandService', () => {
     expect(prisma.reservations.create).not.toHaveBeenCalled();
   });
 
-  it('approves a reservation and assigns an available storage in one transaction', async () => {
+  it('승인하면 시간 겹침 기준으로 보관함을 붙이되 보관함 상태는 바꾸지 않는다 (PRD F-004)', async () => {
     const { service, tx } = createReservationCommandService();
     const startTime = new Date('2026-04-27T01:00:00.000Z');
     const endTime = new Date('2026-04-27T03:00:00.000Z');
@@ -118,10 +119,17 @@ describe('ReservationCommandService', () => {
 
     const result = await service.approveReservation('store_1', 'res_1');
 
-    expect(tx.storages.update).toHaveBeenCalledWith({
-      where: { id: 'storage_1' },
-      data: expect.objectContaining({ status: storages_status.occupied }),
-    });
+    // 미래 예약이 보관함을 occupied로 잠가 다른 시간대 예약을 막던 버그의 재발 방지:
+    // 현재 상태가 아니라 maintenance만 제외하고, 배정해도 상태를 쓰지 않는다.
+    expect(tx.storages.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { not: storages_status.maintenance },
+        }),
+      }),
+    );
+    expect(tx.storages.update).not.toHaveBeenCalled();
+    expect(tx.storages.updateMany).not.toHaveBeenCalled();
     expect(tx.reservations.update).toHaveBeenCalledWith({
       where: { id: 'res_1' },
       data: expect.objectContaining({
@@ -274,7 +282,7 @@ describe('ReservationCommandService', () => {
     expect(result.storageNumber).toBe('S9');
   });
 
-  it('keeps a reservation pending when no storage is available on creation', async () => {
+  it('붙일 보관함이 없어도 생성한 예약은 보관함 없이 confirmed로 확정한다 (PRD F-008)', async () => {
     const { service, prisma, tx } = createReservationCommandService();
     const createdReservation = {
       id: 'res_3',
@@ -305,9 +313,11 @@ describe('ReservationCommandService', () => {
 
     prisma.reservations.create.mockResolvedValue(createdReservation);
     tx.reservations.findFirst.mockResolvedValue(createdReservation);
-    // 가용 보관함 없음 → assignAvailableStorage가 NO_AVAILABLE_STORAGE를 던진다.
     tx.storages.findFirst.mockResolvedValue(null);
-    prisma.reservations.findUnique.mockResolvedValue(createdReservation);
+    prisma.reservations.findUnique.mockResolvedValue({
+      ...createdReservation,
+      status: reservations_status.confirmed,
+    });
 
     const result = await service.createStoreReservation('store_1', {
       customerName: '홍길동',
@@ -318,8 +328,15 @@ describe('ReservationCommandService', () => {
       storageType: reservations_requested_storage_type.s,
     });
 
-    expect(tx.reservations.update).not.toHaveBeenCalled();
-    expect(result.status).toBe(reservations_status.pending);
+    expect(tx.reservations.update).toHaveBeenCalledWith({
+      where: { id: 'res_3' },
+      data: expect.objectContaining({
+        status: reservations_status.confirmed,
+        storage_id: null,
+        storage_number: null,
+      }),
+    });
+    expect(result.status).toBe(reservations_status.confirmed);
   });
 
   it('releases assigned storage when a reservation is cancelled', async () => {
@@ -414,6 +431,27 @@ describe('ReservationCommandService', () => {
       id: 'res_1',
       status: reservations_status.in_progress,
       photos: [],
+    });
+  });
+
+  it('체크인하면 배정된 보관함을 occupied로 바꾼다 — 점검 중 보관함은 제외 (PRD F-004)', async () => {
+    const { service, tx } = createReservationCommandService();
+    tx.reservations.findFirst.mockResolvedValue({
+      id: 'res_1',
+      store_id: 'store_1',
+      customer_id: 'cust_1',
+      customer_phone: '01012345678',
+      status: reservations_status.confirmed,
+      actual_start_time: null,
+      luggage_image_urls: null,
+      storage_id: 'storage_1',
+    });
+
+    await service.storeCheckin('store_1', 'res_1', { photoUrls: [] });
+
+    expect(tx.storages.updateMany).toHaveBeenCalledWith({
+      where: { id: 'storage_1', status: storages_status.available },
+      data: expect.objectContaining({ status: storages_status.occupied }),
     });
   });
 

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   Prisma,
   reservations_requested_storage_type,
@@ -14,7 +14,13 @@ type TransactionClient = Prisma.TransactionClient;
 export class ReservationStorageService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async assignAvailableStorage(
+  /**
+   * 예약 시간대에 비어 있는 보관함을 번호순으로 고른다(PRD F-004 보관함 배정 규칙).
+   * 비어 있는지는 보관함의 현재 상태가 아니라 시간이 겹치는 활성 예약 유무로 판단하고,
+   * 배정해도 상태는 바꾸지 않는다. 고를 보관함이 없으면 null — 판매 여부는 수용량 검사가
+   * 이미 판단했으므로 호출부는 보관함 없이 예약을 확정한다.
+   */
+  async findStorageForReservation(
     tx: TransactionClient,
     params: {
       storeId: string;
@@ -22,13 +28,12 @@ export class ReservationStorageService {
       endTime: Date | null;
       storageType: reservations_requested_storage_type;
     },
-  ) {
-    const storageType = normalizeStorageAssignmentType(params.storageType);
-    const storage = await tx.storages.findFirst({
+  ): Promise<{ id: string; number: string } | null> {
+    return tx.storages.findFirst({
       where: {
         store_id: params.storeId,
-        status: storages_status.available,
-        type: storageType,
+        status: { not: storages_status.maintenance },
+        type: normalizeStorageAssignmentType(params.storageType),
         reservations: {
           none: this.buildOverlappingReservationWhere(
             params.startTime,
@@ -42,29 +47,24 @@ export class ReservationStorageService {
         number: true,
       },
     });
+  }
 
-    if (!storage) {
-      throw new ConflictException({
-        code: 'NO_AVAILABLE_STORAGE',
-        message: '해당 시간에 사용할 수 있는 보관함이 없습니다.',
-        details: {
-          storeId: params.storeId,
-          startTime: params.startTime,
-          endTime: params.endTime,
-          storageType,
-        },
-      });
+  /** 체크인으로 짐이 실제로 들어간 보관함을 occupied로 바꾼다. 점검 중인 보관함은 건드리지 않는다. */
+  async occupyStorageIfAny(
+    tx: TransactionClient,
+    storageId?: string | null,
+  ): Promise<void> {
+    if (!storageId) {
+      return;
     }
 
-    await tx.storages.update({
-      where: { id: storage.id },
+    await tx.storages.updateMany({
+      where: { id: storageId, status: storages_status.available },
       data: {
         status: storages_status.occupied,
         updated_at: new Date(),
       },
     });
-
-    return storage;
   }
 
   async releaseStorageIfAny(
