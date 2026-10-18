@@ -20,6 +20,7 @@ import { PublicHolidaysModule } from './modules/public-holidays/public-holidays.
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { StoragesModule } from './modules/storages/storages.module';
 import { StoresModule } from './modules/stores/stores.module';
+import { StaffModule } from './modules/staff/staff.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { OwnerActionsModule } from './modules/owner-actions/owner-actions.module';
@@ -53,6 +54,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
     CouponsModule,
     HealthModule,
     StoresModule,
+    StaffModule,
     StoragesModule,
     ReservationsModule,
     DashboardModule,

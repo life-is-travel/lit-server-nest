@@ -7,6 +7,12 @@ export class StoreUserInfoDto {
   @ApiProperty()
   storeId: string;
 
+  @ApiProperty({
+    enum: ['owner', 'staff'],
+    description: '점주 또는 초대코드로 시작한 직원(F-024)',
+  })
+  role: 'owner' | 'staff';
+
   @ApiProperty()
   email: string;
 

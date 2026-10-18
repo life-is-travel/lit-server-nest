@@ -24,6 +24,7 @@ import {
   PresignUploadResponseDto,
 } from './dto/presign-upload.dto';
 import { UploadsService } from './uploads.service';
+import { StaffAllowed } from '../auth/decorators/staff-allowed.decorator';
 
 @ApiTags('Uploads')
 @Controller()
@@ -44,6 +45,7 @@ export class UploadsController {
       '매장 앱이 직접 Cloudflare R2에 파일을 업로드할 수 있는 PUT presigned URL을 발급합니다. URL은 5분간 유효합니다.',
   })
   @ApiCreatedResponse({ type: PresignUploadResponseDto })
+  @StaffAllowed()
   presignForStore(
     @CurrentStoreId() storeId: string | undefined,
     @Body() dto: PresignUploadRequestDto,
