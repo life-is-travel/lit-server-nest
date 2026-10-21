@@ -26,10 +26,15 @@ const createService = (config: Record<string, string>) => {
     },
   };
 
+  const storePushService = {
+    notifyStore: jest.fn().mockResolvedValue(undefined),
+  };
+
   const service = new NotificationsService(
     configService,
     mailService as never,
     prisma as never,
+    storePushService as never,
   );
   const errorSpy = jest
     .spyOn(
@@ -42,11 +47,12 @@ const createService = (config: Record<string, string>) => {
     )
     .mockImplementation(() => undefined);
 
-  return { service, mailService, prisma, errorSpy };
+  return { service, mailService, prisma, storePushService, errorSpy };
 };
 
 const cancelData: CancelNotificationData = {
   reservationId: 'res_abc-123456',
+  storeId: 'store_1',
   customerPhone: '01012345678',
   storeName: '테스트 매장',
   ownerPhone: '01099998888',
@@ -58,6 +64,7 @@ const cancelData: CancelNotificationData = {
 
 const createData: CreateNotificationData = {
   reservationId: 'res_abc-123456',
+  storeId: 'store_1',
   storeName: '테스트 매장',
   storeAddress: '서울',
   ownerPhone: '01099998888',
@@ -101,6 +108,7 @@ describe('NotificationsService', () => {
 
     await service.sendCreateNotification({
       reservationId: 'res_abc',
+      storeId: 'store_1',
       storeName: '테스트 매장',
       storeAddress: '서울',
       ownerPhone: '01099998888',
@@ -310,6 +318,58 @@ describe('NotificationsService', () => {
     await service.sendCancelNotification(cancelData);
 
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  describe('매장 앱 푸시', () => {
+    it('새 예약을 매장 기기로 푸시한다', async () => {
+      const { service, storePushService } = createService({});
+
+      await service.sendCreateNotification(createData);
+
+      expect(storePushService.notifyStore).toHaveBeenCalledWith('store_1', {
+        title: '[테스트 매장] 새 예약이 들어왔어요',
+        body: expect.stringContaining('홍길동 · 소형 1개 · '),
+        data: {
+          type: 'reservation_created',
+          reservationId: 'res_abc-123456',
+          storeId: 'store_1',
+        },
+      });
+    });
+
+    it('예약 취소를 매장 기기로 푸시하고, 여러 건이면 건수를 붙인다', async () => {
+      const { service, storePushService } = createService({});
+
+      await service.sendCancelNotification({
+        ...cancelData,
+        cancelledCount: 2,
+      });
+
+      expect(storePushService.notifyStore).toHaveBeenCalledWith('store_1', {
+        title: '[테스트 매장] 예약이 취소됐어요',
+        body: expect.stringMatching(/예약 2건이 취소됐어요\.$/),
+        data: {
+          type: 'reservation_cancelled',
+          reservationId: 'res_abc-123456',
+          storeId: 'store_1',
+        },
+      });
+    });
+
+    it('푸시가 실패해도 다른 채널은 보내고 push_store 실패만 기록한다', async () => {
+      const { service, storePushService, errorSpy } = createService({});
+      storePushService.notifyStore.mockRejectedValue(new Error('fcm down'));
+
+      await service.sendCreateNotification(createData);
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'notifications.channel_failed',
+          channel: 'push_store',
+        }),
+      );
+    });
   });
 
   describe('sendCheckoutNotification', () => {

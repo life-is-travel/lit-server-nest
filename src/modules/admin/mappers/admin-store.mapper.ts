@@ -13,7 +13,7 @@ export const toAdminStoreListItem = (
 ): AdminStoreListItemDto => ({
   storeId: store.id,
   businessName: store.business_name,
-  email: store.email,
+  email: store.owners?.email ?? store.email ?? '',
   businessType: store.business_type,
   hasCompletedSetup: store.has_completed_setup ?? false,
   storeStatus,
@@ -28,7 +28,7 @@ export const toAdminStoreSummaryStore = (
 ): AdminStoreSummaryStoreDto => ({
   id: store.id,
   businessName: store.business_name,
-  email: store.email,
+  email: store.owners?.email ?? store.email ?? '',
   businessType: store.business_type,
   businessNumber: store.business_number,
   representativeName: store.representative_name,

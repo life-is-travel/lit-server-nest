@@ -1,6 +1,7 @@
 import { Reflector } from '@nestjs/core';
 import { StoreCouponPoliciesController } from '../coupons/store-coupon-policies.controller';
 import { DashboardController } from '../dashboard/dashboard.controller';
+import { StorePushDevicesController } from '../push/store-push-devices.controller';
 import { ReservationsController } from '../reservations/reservations.controller';
 import { StoreReviewsController } from '../reviews/store-reviews.controller';
 import { StaffAuthController } from '../staff/staff-auth.controller';
@@ -10,6 +11,7 @@ import { StoresController } from '../stores/stores.controller';
 import { UploadsController } from '../uploads/uploads.controller';
 import { STAFF_ALLOWED_KEY } from './decorators/staff-allowed.decorator';
 import { AuthController } from './auth.controller';
+import { OwnerStoresController } from './owner-stores.controller';
 
 /**
  * 직원 권한표(PRD F-024)를 코드로 고정한다.
@@ -41,7 +43,11 @@ const STAFF_ALLOWED: Record<string, string[]> = {
   UploadsController: ['presignForStore'],
   StaffAuthController: ['leave'],
   StoreStaffController: [],
+  // 직원 기기도 새 예약·취소 푸시를 받는다
+  StorePushDevicesController: ['register', 'unregister'],
   AuthController: [],
+  // 다매장 목록·전환·추가는 점주 전용(F-026)
+  OwnerStoresController: [],
 };
 
 const CONTROLLERS = [
@@ -54,7 +60,9 @@ const CONTROLLERS = [
   UploadsController,
   StaffAuthController,
   StoreStaffController,
+  StorePushDevicesController,
   AuthController,
+  OwnerStoresController,
 ];
 
 const staffAllowedHandlers = (controller: { prototype: object }): string[] => {

@@ -15,11 +15,13 @@ import {
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/database/prisma.service';
 import {
-  AuthTokenResponseDto,
+  OwnerSessionResponseDto,
+  OwnerStoreSummaryDto,
   RefreshAccessTokenResponseDto,
 } from './dto/auth-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { AddStoreDto } from './dto/owner-store.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendEmailVerificationDto } from './dto/send-email-verification.dto';
@@ -53,6 +55,12 @@ type WithdrawResponse = {
   message: string;
 };
 
+type OwnerRecord = {
+  id: string;
+  email: string;
+  password_hash: string;
+};
+
 // 탈퇴를 막는 진행 중 예약 상태. 이 상태의 예약은 고객 짐/결제가 걸려 있다.
 const ACTIVE_RESERVATION_STATUSES: reservations_status[] = [
   reservations_status.pending,
@@ -82,18 +90,7 @@ export class AuthService {
     dto: SendEmailVerificationDto,
   ): Promise<EmailVerificationSentResponse> {
     const email = dto.email.trim().toLowerCase();
-    const existingStore = await this.prisma.stores.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-
-    if (existingStore) {
-      throw new BadRequestException({
-        code: 'EMAIL_ALREADY_EXISTS',
-        message: '이미 등록된 이메일입니다.',
-        details: { email },
-      });
-    }
+    await this.assertEmailAvailable(email);
 
     const code = this.emailVerificationService.generateCode();
 
@@ -124,9 +121,9 @@ export class AuthService {
     };
   }
 
-  async register(dto: RegisterDto): Promise<AuthTokenResponseDto> {
+  /** 회원가입: 점주와 첫 매장을 함께 만든다(F-026). */
+  async register(dto: RegisterDto): Promise<OwnerSessionResponseDto> {
     const email = dto.email.trim().toLowerCase();
-    const businessName = dto.businessName.trim();
 
     await this.emailVerificationService.assertEmailVerified(email);
     await this.assertEmailAvailable(email);
@@ -136,94 +133,49 @@ export class AuthService {
     }
 
     const passwordHash = await this.passwordService.hash(dto.password);
-    const storeId = `store_${randomUUID()}`;
-    const refreshToken = this.tokenService.generateRefreshToken(storeId, email);
-    const accessToken = this.tokenService.generateAccessToken(storeId, email);
-    const refreshTokenExpiresAt =
-      this.tokenService.getStoreRefreshTokenExpiresAt();
+    const ownerId = `owner_${randomUUID()}`;
 
     const createdStore = await this.prisma.$transaction(async (tx) => {
-      const slug = await this.generateUniqueSlug(tx, businessName);
-      const store = await tx.stores.create({
-        data: {
-          id: storeId,
-          email,
-          password_hash: passwordHash,
-          phone_number: dto.phoneNumber ?? null,
-          store_phone_number: dto.storePhoneNumber ?? null,
-          wants_sms_notification: dto.wantsSmsNotification ?? false,
-          business_number: dto.businessNumber ?? null,
-          business_name: businessName,
-          slug,
-          representative_name: dto.representativeName ?? null,
-          address: dto.address ?? null,
-          detail_address: dto.detailAddress ?? null,
-          latitude: dto.latitude ?? null,
-          longitude: dto.longitude ?? null,
-          business_type: dto.businessType ?? null,
-          description: dto.description ?? null,
-          has_completed_setup: false,
-        },
+      await tx.owners.create({
+        data: { id: ownerId, email, password_hash: passwordHash },
       });
-
-      await tx.store_status.create({
-        data: {
-          store_id: storeId,
-          status: store_status_status.closed,
-          reason: '신규 가입',
-        },
-      });
-
-      await tx.store_settings.create({
-        data: {
-          store_id: storeId,
-        },
-      });
-
-      await tx.refresh_tokens.create({
-        data: {
-          store_id: storeId,
-          token: refreshToken,
-          expires_at: refreshTokenExpiresAt,
-        },
-      });
-
-      return store;
+      // 첫 매장은 기존 매장들처럼 stores.email에 점주 이메일을 남긴다(관리자 화면 호환).
+      return this.createStoreInTx(tx, ownerId, dto, email);
     });
 
-    return this.createAuthResponse(createdStore, accessToken, refreshToken);
+    return this.issueOwnerSession({ id: ownerId, email }, createdStore);
   }
 
-  async login(dto: LoginDto): Promise<AuthTokenResponseDto> {
+  /**
+   * 점주 로그인(F-026). 잠금 정책은 기존과 같고 owners에 기록한다.
+   * 열린 매장 중 최근에 쓴 매장의 토큰을 발급하고 매장 목록을 함께 준다.
+   */
+  async login(dto: LoginDto): Promise<OwnerSessionResponseDto> {
     const email = dto.email.trim().toLowerCase();
-    const store = await this.prisma.stores.findUnique({
-      where: { email },
-    });
+    const owner = await this.prisma.owners.findUnique({ where: { email } });
 
-    if (!store) {
+    if (!owner || owner.withdrawn_at) {
       throw this.authenticationFailed();
     }
 
-    // PIN 잠금과 동일 정책: 연속 실패 횟수(login_count)가 임계값에 도달하면
-    // login_locked_until까지 로그인을 거부하고, 성공 시 카운트를 초기화한다.
-    if (store.login_locked_until && store.login_locked_until > new Date()) {
-      throw this.accountLocked(store.login_locked_until);
+    if (owner.login_locked_until && owner.login_locked_until > new Date()) {
+      throw this.accountLocked(owner.login_locked_until);
     }
 
     const passwordMatched = await this.passwordService.compare(
       dto.password,
-      store.password_hash,
+      owner.password_hash,
     );
 
     if (!passwordMatched) {
-      const nextFailedCount = store.login_count + 1;
+      const nextFailedCount = owner.login_count + 1;
       const shouldLock = nextFailedCount >= MAX_LOGIN_FAILURES;
       const lockedUntil = shouldLock
         ? this.addMinutes(new Date(), LOGIN_LOCK_MINUTES)
         : null;
 
-      await this.prisma.stores.update({
-        where: { id: store.id },
+      await this.prisma.owners.update({
+        where: { id: owner.id },
         data: {
           login_count: nextFailedCount,
           login_locked_until: lockedUntil,
@@ -240,26 +192,14 @@ export class AuthService {
       );
     }
 
-    const accessToken = this.tokenService.generateAccessToken(
-      store.id,
-      store.email,
-    );
-    const refreshToken = this.tokenService.generateRefreshToken(
-      store.id,
-      store.email,
-    );
+    const store = await this.findMostRecentOpenStore(owner.id);
 
-    await this.prisma.refresh_tokens.create({
-      data: {
-        store_id: store.id,
-        token: refreshToken,
-        expires_at: this.tokenService.getStoreRefreshTokenExpiresAt(),
-      },
-    });
+    if (!store) {
+      throw this.authenticationFailed();
+    }
 
-    // 로그인 성공: 실패 카운트와 잠금을 초기화하고 마지막 로그인 시각을 갱신한다.
-    await this.prisma.stores.update({
-      where: { id: store.id },
+    await this.prisma.owners.update({
+      where: { id: owner.id },
       data: {
         last_login_at: new Date(),
         login_count: 0,
@@ -268,52 +208,85 @@ export class AuthService {
       },
     });
 
-    return this.createAuthResponse(store, accessToken, refreshToken);
+    return this.issueOwnerSession(owner, store);
   }
 
-  async changePassword(
+  /** 같은 점주의 열린 매장 목록(F-026). */
+  async listOwnerStores(storeId: string): Promise<OwnerStoreSummaryDto[]> {
+    const owner = await this.findOwnerOfStore(storeId);
+    return this.findOpenStoreSummaries(owner.id);
+  }
+
+  /**
+   * 같은 점주의 다른 매장 토큰을 발급한다(F-026).
+   * 이전 매장의 점주 refresh 토큰을 넘기면 같은 점주 것일 때만 지운다.
+   */
+  async switchStore(
     storeId: string,
-    dto: ChangePasswordDto,
-  ): Promise<ChangePasswordResponse> {
-    const store = await this.prisma.stores.findUnique({
-      where: { id: storeId },
-      select: { id: true, password_hash: true },
+    targetStoreId: string,
+    previousRefreshToken?: string,
+  ): Promise<OwnerSessionResponseDto> {
+    const owner = await this.findOwnerOfStore(storeId);
+    const target = await this.prisma.stores.findFirst({
+      where: { id: targetStoreId, owner_id: owner.id, closed_at: null },
     });
 
-    if (!store) {
+    if (!target) {
       throw new NotFoundException({
         code: 'STORE_NOT_FOUND',
         message: '점포를 찾을 수 없습니다.',
       });
     }
 
-    const passwordMatched = await this.passwordService.compare(
-      dto.currentPassword,
-      store.password_hash,
-    );
-
-    if (!passwordMatched) {
-      throw new UnauthorizedException({
-        code: 'INVALID_CURRENT_PASSWORD',
-        message: '현재 비밀번호가 일치하지 않습니다.',
+    if (previousRefreshToken) {
+      await this.prisma.refresh_tokens.deleteMany({
+        where: {
+          token: previousRefreshToken,
+          staff_id: null,
+          stores: { owner_id: owner.id },
+        },
       });
     }
+
+    return this.issueOwnerSession(owner, target);
+  }
+
+  /** 같은 점주 아래 매장을 추가하고 그 매장 토큰을 발급한다(F-026). */
+  async addStore(
+    storeId: string,
+    dto: AddStoreDto,
+  ): Promise<OwnerSessionResponseDto> {
+    const owner = await this.findOwnerOfStore(storeId);
+
+    if (dto.businessNumber) {
+      await this.assertBusinessNumberAvailable(dto.businessNumber);
+    }
+
+    const createdStore = await this.prisma.$transaction((tx) =>
+      this.createStoreInTx(tx, owner.id, dto, null),
+    );
+
+    return this.issueOwnerSession(owner, createdStore);
+  }
+
+  /** 점주 비밀번호 변경. 그 점주 모든 매장의 점주 세션을 끊는다(직원 세션은 유지). */
+  async changePassword(
+    storeId: string,
+    dto: ChangePasswordDto,
+  ): Promise<ChangePasswordResponse> {
+    const owner = await this.findOwnerOfStore(storeId);
+    await this.assertOwnerPassword(owner, dto.currentPassword);
 
     const newPasswordHash = await this.passwordService.hash(dto.newPassword);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.stores.update({
-        where: { id: store.id },
-        data: {
-          password_hash: newPasswordHash,
-          updated_at: new Date(),
-        },
+      await tx.owners.update({
+        where: { id: owner.id },
+        data: { password_hash: newPasswordHash, updated_at: new Date() },
       });
 
-      // 비밀번호 변경 시 점주 세션(refresh 토큰)을 무효화한다.
-      // 직원 세션은 점주 비밀번호와 무관하므로 남긴다(F-024).
       await tx.refresh_tokens.deleteMany({
-        where: { store_id: store.id, staff_id: null },
+        where: { staff_id: null, stores: { owner_id: owner.id } },
       });
     });
 
@@ -323,106 +296,42 @@ export class AuthService {
   }
 
   /**
-   * 점주 회원탈퇴. 거래기록 보관 의무(예약·결제·정산서)와 고객 데이터(리뷰)는 남기고
+   * 점주 회원탈퇴(F-026): 점주 계정을 지우고 그 점주의 모든 매장을 폐점한다.
+   * 거래기록 보관 의무(예약·결제·정산서)와 고객 데이터(리뷰)는 남기고
    * 점주 개인·사업자 정보만 비우는 익명화 방식이다. stores 행은 FK 때문에 삭제하지 않는다.
    */
   async withdraw(storeId: string, dto: WithdrawDto): Promise<WithdrawResponse> {
-    const store = await this.prisma.stores.findUnique({
-      where: { id: storeId },
-      select: { id: true, password_hash: true, closed_at: true },
-    });
-
-    if (!store || store.closed_at) {
-      throw new NotFoundException({
-        code: 'STORE_NOT_FOUND',
-        message: '점포를 찾을 수 없습니다.',
-      });
-    }
-
-    const passwordMatched = await this.passwordService.compare(
-      dto.password,
-      store.password_hash,
-    );
-
-    if (!passwordMatched) {
-      throw new UnauthorizedException({
-        code: 'INVALID_CURRENT_PASSWORD',
-        message: '현재 비밀번호가 일치하지 않습니다.',
-      });
-    }
+    const owner = await this.findOwnerOfStore(storeId);
+    await this.assertOwnerPassword(owner, dto.password);
 
     // 로그인할 수 없는 무작위 해시. 원래 비밀번호 해시는 보존하지 않는다.
     const unusablePasswordHash = await this.passwordService.hash(randomUUID());
 
     await this.prisma.$transaction(async (tx) => {
-      // 예약 생성과의 경쟁을 막기 위해 검사도 트랜잭션 안에서 한다.
-      const activeCount = await tx.reservations.count({
-        where: {
-          store_id: store.id,
-          status: { in: ACTIVE_RESERVATION_STATUSES },
-        },
+      const openStores = await tx.stores.findMany({
+        where: { owner_id: owner.id, closed_at: null },
+        select: { id: true },
       });
+      const storeIds = openStores.map((store) => store.id);
 
-      if (activeCount > 0) {
-        throw new ConflictException({
-          code: 'ACTIVE_RESERVATIONS_EXIST',
-          message: '진행 중인 예약이 있어 탈퇴할 수 없습니다.',
-          details: { count: activeCount },
-        });
+      // 예약 생성과의 경쟁을 막기 위해 검사도 트랜잭션 안에서 한다.
+      await this.assertNoActiveReservations(tx, storeIds);
+
+      for (const id of storeIds) {
+        await this.closeStoreInTx(tx, id, unusablePasswordHash);
       }
 
-      const where = { store_id: store.id };
-      await tx.refresh_tokens.deleteMany({ where });
-      await tx.store_settlement_accounts.deleteMany({ where });
-      await tx.store_settings.deleteMany({ where });
-      await tx.store_operating_hours.deleteMany({ where });
-      await tx.notifications.deleteMany({ where });
+      await tx.store_push_devices.deleteMany({ where: { owner_id: owner.id } });
 
       const now = new Date();
-      // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 남은 직원을 해제하고,
-      // 이미 해제된 직원까지 이름을 익명화한 뒤 미사용 초대코드를 폐기한다.
-      await tx.store_staff.updateMany({
-        where: { store_id: store.id, status: store_staff_status.active },
+      await tx.owners.update({
+        where: { id: owner.id },
         data: {
-          status: store_staff_status.revoked,
-          revoked_at: now,
-          updated_at: now,
-        },
-      });
-      await tx.store_staff.updateMany({
-        where: { store_id: store.id },
-        data: { name: WITHDRAWN_STAFF_NAME, updated_at: now },
-      });
-      await tx.store_staff_invite_codes.updateMany({
-        where: { store_id: store.id, used_at: null, revoked_at: null },
-        data: { revoked_at: now },
-      });
-
-      await tx.stores.update({
-        where: { id: store.id },
-        data: {
-          email: `withdrawn_${store.id}@${WITHDRAWN_EMAIL_DOMAIN}`,
+          email: `withdrawn_${owner.id}@${WITHDRAWN_EMAIL_DOMAIN}`,
           password_hash: unusablePasswordHash,
-          business_name: WITHDRAWN_STORE_NAME,
-          store_pin_hash: null,
-          store_pin_updated_at: null,
-          store_pin_failed_count: 0,
-          store_pin_locked_until: null,
-          phone_number: null,
-          store_phone_number: null,
-          notification_phone: null,
-          notification_phones: Prisma.DbNull,
-          wants_sms_notification: false,
-          business_number: null,
-          representative_name: null,
-          address: null,
-          detail_address: null,
-          latitude: null,
-          longitude: null,
-          description: null,
-          profile_image_url: null,
-          slug: null,
-          closed_at: now,
+          login_count: 0,
+          login_locked_until: null,
+          withdrawn_at: now,
           updated_at: now,
         },
       });
@@ -431,6 +340,48 @@ export class AuthService {
     return {
       message: '회원탈퇴가 완료되었습니다.',
     };
+  }
+
+  /**
+   * 매장 하나만 폐점한다(F-026). 점주의 마지막 열린 매장이면 회원탈퇴를 쓰게 한다.
+   * 폐점한 매장 토큰은 더 쓸 수 없으므로, 남은 매장 중 최근 매장의 세션을 바로 발급한다.
+   */
+  async closeStore(
+    storeId: string,
+    dto: WithdrawDto,
+  ): Promise<OwnerSessionResponseDto> {
+    const owner = await this.findOwnerOfStore(storeId);
+    await this.assertOwnerPassword(owner, dto.password);
+
+    const unusablePasswordHash = await this.passwordService.hash(randomUUID());
+
+    await this.prisma.$transaction(async (tx) => {
+      const openStoreCount = await tx.stores.count({
+        where: { owner_id: owner.id, closed_at: null },
+      });
+
+      if (openStoreCount <= 1) {
+        throw new ConflictException({
+          code: 'LAST_STORE',
+          message:
+            '마지막 매장은 폐점할 수 없습니다. 계정을 지우려면 회원탈퇴를 이용해주세요.',
+        });
+      }
+
+      await this.assertNoActiveReservations(tx, [storeId]);
+      await this.closeStoreInTx(tx, storeId, unusablePasswordHash);
+    });
+
+    const nextStore = await this.findMostRecentOpenStore(owner.id);
+    if (!nextStore) {
+      // 위 트랜잭션에서 열린 매장이 2개 이상임을 확인했으므로 동시 폐점 경쟁에서만 생긴다.
+      throw new NotFoundException({
+        code: 'STORE_NOT_FOUND',
+        message: '점포를 찾을 수 없습니다.',
+      });
+    }
+
+    return this.issueOwnerSession(owner, nextStore);
   }
 
   async logout(dto: RefreshTokenDto): Promise<LogoutResponse> {
@@ -483,10 +434,10 @@ export class AuthService {
 
     const store = await this.prisma.stores.findUnique({
       where: { id: tokenRecord.store_id },
-      select: { id: true, email: true },
+      select: { id: true, owners: { select: { email: true } } },
     });
 
-    if (!store || store.id !== payload.storeId) {
+    if (!store || store.id !== payload.storeId || !store.owners) {
       throw new NotFoundException({
         code: 'STORE_NOT_FOUND',
         message: '점포를 찾을 수 없습니다.',
@@ -494,7 +445,10 @@ export class AuthService {
     }
 
     return {
-      token: this.tokenService.generateAccessToken(store.id, store.email),
+      token: this.tokenService.generateAccessToken(
+        store.id,
+        store.owners.email,
+      ),
       expiresIn: this.tokenService.getAccessTokenExpiresInSeconds(),
     };
   }
@@ -534,12 +488,12 @@ export class AuthService {
   }
 
   private async assertEmailAvailable(email: string): Promise<void> {
-    const existingStore = await this.prisma.stores.findUnique({
+    const existingOwner = await this.prisma.owners.findUnique({
       where: { email },
       select: { id: true },
     });
 
-    if (existingStore) {
+    if (existingOwner) {
       throw new BadRequestException({
         code: 'EMAIL_ALREADY_EXISTS',
         message: '이미 등록된 이메일입니다.',
@@ -615,20 +569,231 @@ export class AuthService {
     return Boolean(existingStore);
   }
 
-  private createAuthResponse(
+  /** 토큰의 매장이 속한 점주. 탈퇴·폐점 매장이면 404. */
+  private async findOwnerOfStore(storeId: string): Promise<OwnerRecord> {
+    const store = await this.prisma.stores.findUnique({
+      where: { id: storeId },
+      select: {
+        closed_at: true,
+        owners: {
+          select: {
+            id: true,
+            email: true,
+            password_hash: true,
+            withdrawn_at: true,
+          },
+        },
+      },
+    });
+
+    if (
+      !store ||
+      store.closed_at ||
+      !store.owners ||
+      store.owners.withdrawn_at
+    ) {
+      throw new NotFoundException({
+        code: 'STORE_NOT_FOUND',
+        message: '점포를 찾을 수 없습니다.',
+      });
+    }
+
+    return store.owners;
+  }
+
+  private async assertOwnerPassword(
+    owner: OwnerRecord,
+    password: string,
+  ): Promise<void> {
+    const passwordMatched = await this.passwordService.compare(
+      password,
+      owner.password_hash,
+    );
+
+    if (!passwordMatched) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CURRENT_PASSWORD',
+        message: '현재 비밀번호가 일치하지 않습니다.',
+      });
+    }
+  }
+
+  private async assertNoActiveReservations(
+    tx: Prisma.TransactionClient,
+    storeIds: string[],
+  ): Promise<void> {
+    if (storeIds.length === 0) return;
+
+    const activeCount = await tx.reservations.count({
+      where: {
+        store_id: { in: storeIds },
+        status: { in: ACTIVE_RESERVATION_STATUSES },
+      },
+    });
+
+    if (activeCount > 0) {
+      throw new ConflictException({
+        code: 'ACTIVE_RESERVATIONS_EXIST',
+        message: '진행 중인 예약이 있어 탈퇴할 수 없습니다.',
+        details: { count: activeCount },
+      });
+    }
+  }
+
+  /**
+   * 매장 하나를 익명화·폐점한다(F-001 탈퇴 규칙). 회원탈퇴와 매장 폐점이 함께 쓴다.
+   * 삭제: refresh 토큰·정산 계좌·설정·운영시간·알림·이 매장 기기 토큰
+   * 보존: 예약·결제·정산서·통계·리뷰·보관함
+   */
+  private async closeStoreInTx(
+    tx: Prisma.TransactionClient,
+    storeId: string,
+    unusablePasswordHash: string,
+  ): Promise<void> {
+    const where = { store_id: storeId };
+    await tx.refresh_tokens.deleteMany({ where });
+    await tx.store_settlement_accounts.deleteMany({ where });
+    await tx.store_settings.deleteMany({ where });
+    await tx.store_operating_hours.deleteMany({ where });
+    await tx.notifications.deleteMany({ where });
+    await tx.store_push_devices.deleteMany({ where });
+
+    const now = new Date();
+    // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 남은 직원을 해제하고,
+    // 이미 해제된 직원까지 이름을 익명화한 뒤 미사용 초대코드를 폐기한다.
+    await tx.store_staff.updateMany({
+      where: { store_id: storeId, status: store_staff_status.active },
+      data: {
+        status: store_staff_status.revoked,
+        revoked_at: now,
+        updated_at: now,
+      },
+    });
+    await tx.store_staff.updateMany({
+      where: { store_id: storeId },
+      data: { name: WITHDRAWN_STAFF_NAME, updated_at: now },
+    });
+    await tx.store_staff_invite_codes.updateMany({
+      where: { store_id: storeId, used_at: null, revoked_at: null },
+      data: { revoked_at: now },
+    });
+
+    await tx.stores.update({
+      where: { id: storeId },
+      data: {
+        email: `withdrawn_${storeId}@${WITHDRAWN_EMAIL_DOMAIN}`,
+        password_hash: unusablePasswordHash,
+        business_name: WITHDRAWN_STORE_NAME,
+        store_pin_hash: null,
+        store_pin_updated_at: null,
+        store_pin_failed_count: 0,
+        store_pin_locked_until: null,
+        phone_number: null,
+        store_phone_number: null,
+        notification_phone: null,
+        notification_phones: Prisma.DbNull,
+        wants_sms_notification: false,
+        business_number: null,
+        representative_name: null,
+        address: null,
+        detail_address: null,
+        latitude: null,
+        longitude: null,
+        description: null,
+        profile_image_url: null,
+        slug: null,
+        closed_at: now,
+        updated_at: now,
+      },
+    });
+  }
+
+  /** 회원가입·매장 추가 공통: 매장 행과 기본 영업 상태·설정을 만든다. */
+  private async createStoreInTx(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    dto: AddStoreDto,
+    email: string | null,
+  ): Promise<stores> {
+    const storeId = `store_${randomUUID()}`;
+    const businessName = dto.businessName.trim();
+    const slug = await this.generateUniqueSlug(tx, businessName);
+
+    const store = await tx.stores.create({
+      data: {
+        id: storeId,
+        owner_id: ownerId,
+        email,
+        phone_number: dto.phoneNumber ?? null,
+        store_phone_number: dto.storePhoneNumber ?? null,
+        wants_sms_notification: dto.wantsSmsNotification ?? false,
+        business_number: dto.businessNumber ?? null,
+        business_name: businessName,
+        slug,
+        representative_name: dto.representativeName ?? null,
+        address: dto.address ?? null,
+        detail_address: dto.detailAddress ?? null,
+        latitude: dto.latitude ?? null,
+        longitude: dto.longitude ?? null,
+        business_type: dto.businessType ?? null,
+        description: dto.description ?? null,
+        has_completed_setup: false,
+      },
+    });
+
+    await tx.store_status.create({
+      data: {
+        store_id: storeId,
+        status: store_status_status.closed,
+        reason: '신규 가입',
+      },
+    });
+
+    await tx.store_settings.create({
+      data: {
+        store_id: storeId,
+      },
+    });
+
+    return store;
+  }
+
+  /** 매장 토큰을 발급·저장하고 매장 사용 시각을 남긴 뒤 응답을 만든다. */
+  private async issueOwnerSession(
+    owner: Pick<OwnerRecord, 'id' | 'email'>,
     store: stores,
-    token: string,
-    refreshToken: string,
-  ): AuthTokenResponseDto {
+  ): Promise<OwnerSessionResponseDto> {
+    const accessToken = this.tokenService.generateAccessToken(
+      store.id,
+      owner.email,
+    );
+    const refreshToken = this.tokenService.generateRefreshToken(
+      store.id,
+      owner.email,
+    );
+
+    await this.prisma.refresh_tokens.create({
+      data: {
+        store_id: store.id,
+        token: refreshToken,
+        expires_at: this.tokenService.getStoreRefreshTokenExpiresAt(),
+      },
+    });
+
+    await this.prisma.stores.update({
+      where: { id: store.id },
+      data: { last_login_at: new Date() },
+    });
+
     return {
-      token,
+      token: accessToken,
       refreshToken,
       expiresIn: this.tokenService.getAccessTokenExpiresInSeconds(),
       user_info: {
         id: store.id,
         storeId: store.id,
         role: 'owner',
-        email: store.email,
+        email: owner.email,
         businessName: store.business_name,
         phoneNumber: store.phone_number,
         storePhoneNumber: store.store_phone_number,
@@ -648,7 +813,41 @@ export class AuthService {
         createdAt: store.created_at,
         updatedAt: store.updated_at,
       },
+      stores: await this.findOpenStoreSummaries(owner.id),
     };
+  }
+
+  /** 최근에 쓴 열린 매장, 한 번도 안 썼으면 먼저 만든 매장 */
+  private findMostRecentOpenStore(ownerId: string): Promise<stores | null> {
+    return this.prisma.stores.findFirst({
+      where: { owner_id: ownerId, closed_at: null },
+      orderBy: [
+        { last_login_at: { sort: 'desc', nulls: 'last' } },
+        { created_at: 'asc' },
+      ],
+    });
+  }
+
+  private async findOpenStoreSummaries(
+    ownerId: string,
+  ): Promise<OwnerStoreSummaryDto[]> {
+    const stores = await this.prisma.stores.findMany({
+      where: { owner_id: ownerId, closed_at: null },
+      orderBy: { created_at: 'asc' },
+      select: {
+        id: true,
+        business_name: true,
+        profile_image_url: true,
+        has_completed_setup: true,
+      },
+    });
+
+    return stores.map((store) => ({
+      storeId: store.id,
+      businessName: store.business_name,
+      profileImageUrl: store.profile_image_url,
+      hasCompletedSetup: Boolean(store.has_completed_setup),
+    }));
   }
 
   private authenticationFailed(

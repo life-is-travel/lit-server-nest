@@ -3,13 +3,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, stores } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/database/prisma.service';
 import {
   StoreProfileResponseDto,
   UpdateStoreProfileDto,
 } from './dto/store-profile.dto';
-import { toStoreProfileResponse } from './mappers/store-profile.mapper';
+import {
+  StoreWithOwnerEmail,
+  toStoreProfileResponse,
+} from './mappers/store-profile.mapper';
+
+const OWNER_EMAIL_INCLUDE = {
+  owners: { select: { email: true } },
+} satisfies Prisma.storesInclude;
 
 @Injectable()
 export class StoresService {
@@ -105,14 +112,18 @@ export class StoresService {
           : {}),
         updated_at: new Date(),
       },
+      include: OWNER_EMAIL_INCLUDE,
     });
 
     return toStoreProfileResponse(updatedStore);
   }
 
-  private async findStoreOrThrow(storeId: string): Promise<stores> {
+  private async findStoreOrThrow(
+    storeId: string,
+  ): Promise<StoreWithOwnerEmail> {
     const store = await this.prisma.stores.findUnique({
       where: { id: storeId },
+      include: OWNER_EMAIL_INCLUDE,
     });
 
     if (!store) {

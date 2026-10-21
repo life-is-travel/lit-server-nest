@@ -73,4 +73,7 @@ export const envValidationSchema = Joi.object({
 
   // 고객 이용완료(체크아웃) 알림톡 템플릿. 미설정 시 알림톡 채널 스킵.
   SOLAPI_KAKAO_CHECKOUT_TEMPLATE_ID: Joi.string().optional(),
+
+  // 매장 앱 푸시(FCM) 서비스 계정 JSON의 base64. 미설정 시 푸시 채널 스킵.
+  FIREBASE_SERVICE_ACCOUNT_BASE64: Joi.string().allow('').optional(),
 });
