@@ -55,10 +55,6 @@ type WithdrawResponse = {
   message: string;
 };
 
-type StoreClosureResponse = {
-  message: string;
-};
-
 type OwnerRecord = {
   id: string;
   email: string;
@@ -196,14 +192,7 @@ export class AuthService {
       );
     }
 
-    // 최근에 쓴 매장 우선, 한 번도 안 썼으면 먼저 만든 매장
-    const store = await this.prisma.stores.findFirst({
-      where: { owner_id: owner.id, closed_at: null },
-      orderBy: [
-        { last_login_at: { sort: 'desc', nulls: 'last' } },
-        { created_at: 'asc' },
-      ],
-    });
+    const store = await this.findMostRecentOpenStore(owner.id);
 
     if (!store) {
       throw this.authenticationFailed();
@@ -355,11 +344,12 @@ export class AuthService {
 
   /**
    * 매장 하나만 폐점한다(F-026). 점주의 마지막 열린 매장이면 회원탈퇴를 쓰게 한다.
+   * 폐점한 매장 토큰은 더 쓸 수 없으므로, 남은 매장 중 최근 매장의 세션을 바로 발급한다.
    */
   async closeStore(
     storeId: string,
     dto: WithdrawDto,
-  ): Promise<StoreClosureResponse> {
+  ): Promise<OwnerSessionResponseDto> {
     const owner = await this.findOwnerOfStore(storeId);
     await this.assertOwnerPassword(owner, dto.password);
 
@@ -382,9 +372,16 @@ export class AuthService {
       await this.closeStoreInTx(tx, storeId, unusablePasswordHash);
     });
 
-    return {
-      message: '매장이 폐점되었습니다.',
-    };
+    const nextStore = await this.findMostRecentOpenStore(owner.id);
+    if (!nextStore) {
+      // 위 트랜잭션에서 열린 매장이 2개 이상임을 확인했으므로 동시 폐점 경쟁에서만 생긴다.
+      throw new NotFoundException({
+        code: 'STORE_NOT_FOUND',
+        message: '점포를 찾을 수 없습니다.',
+      });
+    }
+
+    return this.issueOwnerSession(owner, nextStore);
   }
 
   async logout(dto: RefreshTokenDto): Promise<LogoutResponse> {
@@ -818,6 +815,17 @@ export class AuthService {
       },
       stores: await this.findOpenStoreSummaries(owner.id),
     };
+  }
+
+  /** 최근에 쓴 열린 매장, 한 번도 안 썼으면 먼저 만든 매장 */
+  private findMostRecentOpenStore(ownerId: string): Promise<stores | null> {
+    return this.prisma.stores.findFirst({
+      where: { owner_id: ownerId, closed_at: null },
+      orderBy: [
+        { last_login_at: { sort: 'desc', nulls: 'last' } },
+        { created_at: 'asc' },
+      ],
+    });
   }
 
   private async findOpenStoreSummaries(

@@ -454,7 +454,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 
 **회원탈퇴·매장 폐점**
 - ✅ 회원탈퇴(`POST /api/auth/withdraw`)는 점주 계정을 지우는 것이다. 그 점주의 열린 매장 전체에 진행 중 예약이 하나라도 있으면 409 `ACTIVE_RESERVATIONS_EXIST`(`details.count` = 전체 합). 성공하면 모든 매장을 F-001 탈퇴 규칙대로 익명화·폐점하고, 점주는 이메일 `withdrawn_<ownerId>@withdrawn.invalid`·로그인 불가 해시·`withdrawn_at`으로 익명화하며, 점주 기기 푸시 토큰을 지운다. 같은 이메일로 다시 가입할 수 있다.
-- ✅ 매장 폐점(`POST /api/auth/store-closure`, 점주 토큰, 본문 `{ password }`)은 토큰의 매장 하나만 같은 규칙으로 익명화·폐점한다. 비밀번호 불일치 401 `INVALID_CURRENT_PASSWORD`, 진행 중 예약 409 `ACTIVE_RESERVATIONS_EXIST`, **점주의 마지막 열린 매장이면 409 `LAST_STORE`**(회원탈퇴를 안내). 인증 API와 같은 레이트리밋이다.
+- ✅ 매장 폐점(`POST /api/auth/store-closure`, 점주 토큰, 본문 `{ password }`)은 토큰의 매장 하나만 같은 규칙으로 익명화·폐점하고, 폐점한 매장 토큰은 더 쓸 수 없으므로 **남은 매장 중 최근 매장의 세션**(로그인과 같은 응답)을 발급한다. 비밀번호 불일치 401 `INVALID_CURRENT_PASSWORD`, 진행 중 예약 409 `ACTIVE_RESERVATIONS_EXIST`, **점주의 마지막 열린 매장이면 409 `LAST_STORE`**(회원탈퇴를 안내). 인증 API와 같은 레이트리밋이다.
 
 **푸시(F-025 변경)**
 - ✅ 점주 기기는 `store_push_devices.owner_id`로 저장되어, 지금 어느 매장으로 들어가 있든 **그 점주의 모든 매장** 새 예약·취소를 받는다. 직원 기기는 자기 매장만 받는다.

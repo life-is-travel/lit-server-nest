@@ -642,15 +642,23 @@ describe('AuthService', () => {
   });
 
   describe('closeStore (매장 하나 폐점)', () => {
-    it('토큰의 매장만 익명화·폐점하고 점주는 그대로 둔다', async () => {
-      const { service, prisma, tx, passwordService } = createAuthService();
+    it('토큰의 매장만 익명화·폐점하고 남은 최근 매장 세션을 준다', async () => {
+      const { service, prisma, tx, passwordService, tokenService } =
+        createAuthService();
       prisma.stores.findUnique.mockResolvedValue(ownedStore());
       passwordService.compare.mockResolvedValue(true);
       tx.stores.count.mockResolvedValue(2);
+      prisma.stores.findFirst.mockResolvedValue(
+        createStore({ id: 'store_2', business_name: '슬로우버터' }),
+      );
 
-      await expect(
-        service.closeStore('store_1', { password: 'pw' }),
-      ).resolves.toEqual({ message: '매장이 폐점되었습니다.' });
+      const result = await service.closeStore('store_1', { password: 'pw' });
+
+      expect(result.user_info.storeId).toBe('store_2');
+      expect(tokenService.generateAccessToken).toHaveBeenCalledWith(
+        'store_2',
+        'owner@example.com',
+      );
 
       expect(tx.stores.update).toHaveBeenCalledTimes(1);
       expect(tx.stores.update).toHaveBeenCalledWith({

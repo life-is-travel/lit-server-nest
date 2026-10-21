@@ -118,9 +118,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      '지금 매장 하나만 폐점(익명화)합니다. 점주의 마지막 매장이면 409 LAST_STORE.',
+      '지금 매장 하나만 폐점(익명화)하고 남은 최근 매장의 토큰을 발급합니다. 마지막 매장이면 409 LAST_STORE.',
   })
-  @ApiOkResponse()
+  @ApiOkResponse({ type: OwnerSessionResponseDto })
   closeStore(@CurrentStoreId() storeId: string, @Body() dto: WithdrawDto) {
     return this.authService.closeStore(storeId, dto);
   }
