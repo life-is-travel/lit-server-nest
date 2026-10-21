@@ -279,6 +279,7 @@ export class StaffService {
       },
     });
     await tx.refresh_tokens.deleteMany({ where: { staff_id: staffId } });
+    await tx.store_push_devices.deleteMany({ where: { staff_id: staffId } });
     await this.revokeUnusedCodes(tx, staffId, now);
   }
 

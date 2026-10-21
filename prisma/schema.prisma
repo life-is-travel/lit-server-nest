@@ -367,8 +367,25 @@ model store_staff {
   stores                   stores                     @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_staff_store_fk")
   store_staff_invite_codes store_staff_invite_codes[]
   refresh_tokens           refresh_tokens[]
+  store_push_devices       store_push_devices[]
 
   @@index([store_id, status], map: "idx_store_staff_store_status")
+}
+
+/// 매장 앱 푸시 기기(FCM 토큰). staff_id가 NULL이면 점주 기기
+model store_push_devices {
+  id          Int                         @id @default(autoincrement())
+  store_id    String                      @db.VarChar(255)
+  staff_id    String?                     @db.VarChar(255)
+  push_token  String                      @unique(map: "uniq_store_push_token") @db.VarChar(500)
+  platform    store_push_devices_platform
+  created_at  DateTime                    @default(now()) @db.DateTime(0)
+  updated_at  DateTime                    @default(now()) @db.DateTime(0)
+  stores      stores                      @relation(fields: [store_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_push_devices_store_fk")
+  store_staff store_staff?                @relation(fields: [staff_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "store_push_devices_staff_fk")
+
+  @@index([store_id], map: "idx_store_push_store_id")
+  @@index([staff_id], map: "idx_store_push_staff_id")
 }
 
 /// 직원 초대코드. 평문은 저장하지 않고 SHA-256 해시만 저장한다(F-024).
@@ -744,6 +761,7 @@ model stores {
   store_settlement_accounts store_settlement_accounts?
   store_status              store_status[]
   store_staff               store_staff[]
+  store_push_devices        store_push_devices[]
 
   @@index([business_number], map: "idx_business_number")
   @@index([email], map: "idx_email")
@@ -999,4 +1017,9 @@ model public_holidays {
 enum store_staff_status {
   active
   revoked
+}
+
+enum store_push_devices_platform {
+  ios
+  android
 }

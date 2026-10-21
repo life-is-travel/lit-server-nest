@@ -1,6 +1,7 @@
 import { Reflector } from '@nestjs/core';
 import { StoreCouponPoliciesController } from '../coupons/store-coupon-policies.controller';
 import { DashboardController } from '../dashboard/dashboard.controller';
+import { StorePushDevicesController } from '../push/store-push-devices.controller';
 import { ReservationsController } from '../reservations/reservations.controller';
 import { StoreReviewsController } from '../reviews/store-reviews.controller';
 import { StaffAuthController } from '../staff/staff-auth.controller';
@@ -41,6 +42,8 @@ const STAFF_ALLOWED: Record<string, string[]> = {
   UploadsController: ['presignForStore'],
   StaffAuthController: ['leave'],
   StoreStaffController: [],
+  // 직원 기기도 새 예약·취소 푸시를 받는다
+  StorePushDevicesController: ['register', 'unregister'],
   AuthController: [],
 };
 
@@ -54,6 +57,7 @@ const CONTROLLERS = [
   UploadsController,
   StaffAuthController,
   StoreStaffController,
+  StorePushDevicesController,
   AuthController,
 ];
 

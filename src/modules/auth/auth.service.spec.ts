@@ -63,6 +63,9 @@ const createAuthService = () => {
     notifications: {
       deleteMany: jest.fn(),
     },
+    store_push_devices: {
+      deleteMany: jest.fn(),
+    },
     store_staff: {
       updateMany: jest.fn(),
     },
@@ -354,6 +357,7 @@ describe('AuthService', () => {
         tx.store_settings,
         tx.store_operating_hours,
         tx.notifications,
+        tx.store_push_devices,
       ]) {
         expect(table.deleteMany).toHaveBeenCalledWith({
           where: { store_id: 'store_1' },
