@@ -83,6 +83,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | F-022 | 리뷰(비회원 작성·점주 답글·통계) | `api/guest/reviews`, `api/reviews` | Should | 구현완료 |
 | F-023 | 사진 업로드(R2 프리사인)·짐 사진 | `*/uploads/presign`, `api/guest/reservations/*luggage-photos` | Should | 구현완료 |
 | F-024 | 직원 계정(초대코드)·직원 권한 | `api/store/staff`, `api/auth/staff/*` | Should | 구현예정 |
+| F-025 | 매장 앱 푸시 알림(새 예약·취소) | `api/store/push-devices` | Must | 구현완료 |
 
 ---
 
@@ -406,13 +407,26 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 
 **직원 권한 (기본 거부)**
 - ✅ 직원 토큰은 아래 허용 목록의 API만 호출할 수 있고, 그 밖의 점주 API는 403 `OWNER_ONLY`다. 점주 토큰은 기존과 같이 모든 점주 API를 쓴다.
-- ✅ 직원 허용: 예약 목록·상세·생성·승인·체크인·노쇼·짐 점주 메모(`GET/POST /api/reservations`, `GET :id`, `PUT :id/approve|checkin|no-show|luggage-owner-memo`), 예약 상태 변경(`PUT :id/status`, 단 아래 제한), 업로드 프리사인(`POST /api/uploads/presign`), 보관함 조회(`GET /api/storages`, `GET :id`), 영업 상태(`GET/PUT /api/store/status`, `POST open|close`), 매장 정보·설정 조회(`GET /api/store`, `GET /api/store/settings`), 대시보드 요약·실시간(`GET /api/dashboard/summary|realtime`), 리뷰 조회(`GET /api/reviews`, `GET statistics`), 쿠폰 정책 조회(`GET /api/store/coupons/policies`, `GET :id`), 본인 세션(`POST /api/auth/refresh|logout|staff/leave`).
+- ✅ 직원 허용: 예약 목록·상세·생성·승인·체크인·노쇼·짐 점주 메모(`GET/POST /api/reservations`, `GET :id`, `PUT :id/approve|checkin|no-show|luggage-owner-memo`), 예약 상태 변경(`PUT :id/status`, 단 아래 제한), 업로드 프리사인(`POST /api/uploads/presign`), 보관함 조회(`GET /api/storages`, `GET :id`), 영업 상태(`GET/PUT /api/store/status`, `POST open|close`), 매장 정보·설정 조회(`GET /api/store`, `GET /api/store/settings`), 대시보드 요약·실시간(`GET /api/dashboard/summary|realtime`), 리뷰 조회(`GET /api/reviews`, `GET statistics`), 쿠폰 정책 조회(`GET /api/store/coupons/policies`, `GET :id`), 본인 세션(`POST /api/auth/refresh|logout|staff/leave`), 푸시 기기 등록·해제(`POST/DELETE /api/store/push-devices`, F-025).
 - ✅ 직원은 예약 거절·취소(`PUT :id/reject|cancel`)를 할 수 없고, `PUT :id/status`로도 `rejected`·`cancelled`로 바꿀 수 없다(403 `OWNER_ONLY`).
 - ✅ 직원이 받는 대시보드 `summary`·`realtime` 응답의 매출 금액 필드는 `null`이다.
 - ✅ 직원이 받는 `GET /api/store` 응답과 redeem `user_info`에는 점주 개인·사업자 신원 정보(`email`, `phoneNumber`, `notificationPhone(s)`, `businessNumber`, `representativeName`)가 비어 있다(`null`/`[]`).
 - ✅ 점주 로그인·가입 응답 `user_info.role`은 `owner`, 직원 redeem 응답은 `staff`다.
 - ✅ 직원 요청마다 직원 `status = active`와 매장 `closed_at IS NULL`을 DB로 확인한다. 점주 요청은 DB 확인 없이 토큰만 검증한다(기존과 동일).
 - ✅ 점주 알림톡 액션 링크(F-021)는 별도 토큰 방식이라 영향이 없다.
+
+### F-025 매장 앱 푸시 알림 (`api/store/push-devices`)
+**유저 스토리**: 점주·직원으로서 앱을 켜 두지 않아도 새 예약과 예약 취소를 휴대폰 알림으로 바로 안다.
+
+- ✅ `POST /api/store/push-devices`(점주·직원 JWT, 본문 `{ pushToken, platform: 'ios'|'android' }`)로 이 기기의 FCM 토큰을 등록한다. 직원 토큰은 `staff_id`와 함께 저장된다.
+- ✅ 토큰은 기기당 하나(`uniq_store_push_token`)다. 같은 토큰이 다른 매장·직원으로 다시 등록되면 행이 새 소유자로 옮겨가 이전 매장 알림은 더 오지 않는다.
+- ✅ `DELETE /api/store/push-devices`(본문 `{ pushToken }`)는 호출한 매장의 토큰만 지운다. 앱은 로그아웃·직원 나가기 전에 호출한다.
+- ✅ 비회원·고객 예약 생성(`sendCreateNotification`)과 고객 예약 취소(`sendCancelNotification`) 때 그 매장의 점주 기기와 **활성** 직원 기기로 푸시한다. 해제된 직원 기기는 받지 않는다.
+- ✅ 푸시 문구는 점주 알림톡처럼 한국어 고정이다. 새 예약 `새 예약이 들어왔어요` / `<고객명> · <짐> · <시작 시각>`, 취소 `예약이 취소됐어요` / `<시작 시각> 예약[ N건]이 취소됐어요.` 금액은 넣지 않는다(직원 매출 가림과 같은 이유).
+- ✅ 푸시 `data`는 `{ type: 'reservation_created'|'reservation_cancelled', reservationId }`다.
+- ✅ FCM이 `registration-token-not-registered`·`invalid-registration-token`으로 답한 토큰은 발송 직후 삭제한다.
+- ✅ 직원 해제·나가기 시 그 직원 기기 토큰을, 점주 탈퇴 시 매장의 모든 기기 토큰을 같은 트랜잭션에서 삭제한다.
+- ✅ `FIREBASE_SERVICE_ACCOUNT_BASE64`(서비스 계정 JSON의 base64)가 없으면 푸시 채널만 건너뛴다. 푸시 실패는 다른 알림 채널과 예약 결과에 영향을 주지 않는다(`channel: 'push_store'` error 로그).
 
 ---
 

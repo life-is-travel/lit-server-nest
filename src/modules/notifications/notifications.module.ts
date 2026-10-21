@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { PushModule } from '../push/push.module';
 import { NotificationsService } from './notifications.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, PushModule],
   providers: [NotificationsService],
   exports: [NotificationsService],
 })

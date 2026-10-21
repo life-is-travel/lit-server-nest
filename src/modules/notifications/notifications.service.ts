@@ -5,6 +5,7 @@ import { SolapiMessageService } from 'solapi';
 import { PrismaService } from '../../common/database/prisma.service';
 import { MailService } from '../auth/services/mail.service';
 import { createOwnerActionToken } from '../owner-actions/owner-action-token.util';
+import { StorePushService } from '../push/store-push.service';
 
 export interface CheckoutNotificationData {
   reservationId: string;
@@ -19,6 +20,8 @@ export interface CheckoutNotificationData {
 
 export interface CreateNotificationData {
   reservationId: string;
+  /** 매장 앱 푸시 대상 매장 */
+  storeId: string;
   storeName: string;
   storeAddress: string;
   ownerPhone: string;
@@ -52,6 +55,8 @@ export interface ReviewCreatedNotificationData {
 
 export interface CancelNotificationData {
   reservationId: string;
+  /** 매장 앱 푸시 대상 매장 */
+  storeId: string;
   customerPhone: string;
   storeName: string;
   ownerPhone: string;
@@ -269,6 +274,7 @@ export class NotificationsService {
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
     private readonly prisma: PrismaService,
+    private readonly storePushService: StorePushService,
   ) {}
 
   /**
@@ -320,7 +326,7 @@ export class NotificationsService {
   }
 
   /**
-   * 예약 취소 시 Discord embed + 카카오 알림톡(점주)을 발송합니다.
+   * 예약 취소 시 Discord embed + 카카오 알림톡(점주) + 매장 앱 푸시를 발송합니다.
    * 환경변수 미설정 시 해당 채널을 스킵합니다. 채널별 실패는 여기서
    * error 로그로 남깁니다 (allSettled는 reject되지 않으므로 호출자 catch에 안 잡힘).
    */
@@ -328,11 +334,40 @@ export class NotificationsService {
     const results = await Promise.allSettled([
       this.sendDiscordCancelEmbed(data),
       this.sendKakaoCancelAlimtalk(data),
+      this.sendCancelPushToStore(data),
     ]);
     this.logSettledFailures(data.reservationId, results, [
       'discord',
       'kakao_owner',
+      'push_store',
     ]);
+  }
+
+  // ─── 매장 앱 푸시 (점주·직원 기기, 문구는 점주 알림톡처럼 KO 고정) ─────────
+
+  private async sendCreatePushToStore(
+    data: CreateNotificationData,
+  ): Promise<void> {
+    const luggage = buildLuggageListFromItems(data.luggageItems, 'ko');
+    await this.storePushService.notifyStore(data.storeId, {
+      title: '새 예약이 들어왔어요',
+      body: `${data.customerName} · ${luggage} · ${formatKoreanDateTime(data.startTime)}`,
+      data: { type: 'reservation_created', reservationId: data.reservationId },
+    });
+  }
+
+  private async sendCancelPushToStore(
+    data: CancelNotificationData,
+  ): Promise<void> {
+    const count = data.cancelledCount > 1 ? ` ${data.cancelledCount}건` : '';
+    await this.storePushService.notifyStore(data.storeId, {
+      title: '예약이 취소됐어요',
+      body: `${formatKoreanDateTime(data.startTime)} 예약${count}이 취소됐어요.`,
+      data: {
+        type: 'reservation_cancelled',
+        reservationId: data.reservationId,
+      },
+    });
   }
 
   /** 점주 fan-out 결과 로깅 — 수신자별 실패는 warn, 성공 요약은 log. */
@@ -510,7 +545,7 @@ export class NotificationsService {
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * 예약 생성 시 Discord embed + 점주 알림톡 + 고객 알림(알림톡 or SMS)을 병렬 발송합니다.
+   * 예약 생성 시 Discord embed + 점주 알림톡 + 매장 앱 푸시 + 고객 알림(알림톡 or SMS)을 병렬 발송합니다.
    * 환경변수 미설정 채널은 스킵됩니다. 채널별 실패는 여기서 error 로그로 남깁니다.
    */
   async sendCreateNotification(data: CreateNotificationData): Promise<void> {
@@ -518,11 +553,13 @@ export class NotificationsService {
       this.sendDiscordCreateEmbed(data),
       this.sendKakaoCreateAlimtalkToOwner(data),
       this.sendCustomerCreateNotification(data),
+      this.sendCreatePushToStore(data),
     ]);
     this.logSettledFailures(data.reservationId, results, [
       'discord',
       'kakao_owner',
       'customer',
+      'push_store',
     ]);
   }
 

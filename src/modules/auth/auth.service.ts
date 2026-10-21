@@ -377,6 +377,7 @@ export class AuthService {
       await tx.store_settings.deleteMany({ where });
       await tx.store_operating_hours.deleteMany({ where });
       await tx.notifications.deleteMany({ where });
+      await tx.store_push_devices.deleteMany({ where });
 
       const now = new Date();
       // 직원 세션은 위 refresh_tokens 삭제에 포함된다. 남은 직원을 해제하고,
