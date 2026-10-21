@@ -327,9 +327,13 @@ describe('NotificationsService', () => {
       await service.sendCreateNotification(createData);
 
       expect(storePushService.notifyStore).toHaveBeenCalledWith('store_1', {
-        title: '새 예약이 들어왔어요',
+        title: '[테스트 매장] 새 예약이 들어왔어요',
         body: expect.stringContaining('홍길동 · 소형 1개 · '),
-        data: { type: 'reservation_created', reservationId: 'res_abc-123456' },
+        data: {
+          type: 'reservation_created',
+          reservationId: 'res_abc-123456',
+          storeId: 'store_1',
+        },
       });
     });
 
@@ -342,11 +346,12 @@ describe('NotificationsService', () => {
       });
 
       expect(storePushService.notifyStore).toHaveBeenCalledWith('store_1', {
-        title: '예약이 취소됐어요',
+        title: '[테스트 매장] 예약이 취소됐어요',
         body: expect.stringMatching(/예약 2건이 취소됐어요\.$/),
         data: {
           type: 'reservation_cancelled',
           reservationId: 'res_abc-123456',
+          storeId: 'store_1',
         },
       });
     });

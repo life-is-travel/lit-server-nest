@@ -7,6 +7,8 @@ export const ADMIN_STORE_SELECT = {
   id: true,
   business_name: true,
   email: true,
+  // 로그인 이메일은 점주 계정에 있다(F-026). 앱에서 추가한 매장은 stores.email이 NULL
+  owners: { select: { email: true } },
   business_type: true,
   business_number: true,
   representative_name: true,

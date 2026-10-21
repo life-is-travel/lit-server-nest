@@ -1,16 +1,23 @@
 import { Prisma, stores } from '@prisma/client';
 import { StoreProfileResponseDto } from '../dto/store-profile.dto';
 
-const toStringArray = (value: Prisma.JsonValue | null | undefined): string[] => {
+const toStringArray = (
+  value: Prisma.JsonValue | null | undefined,
+): string[] => {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
 };
 
+/** 로그인 이메일은 점주 계정에 있다(F-026). 앱에서 추가한 매장은 stores.email이 NULL */
+export type StoreWithOwnerEmail = stores & {
+  owners?: { email: string } | null;
+};
+
 export const toStoreProfileResponse = (
-  store: stores,
+  store: StoreWithOwnerEmail,
 ): StoreProfileResponseDto => ({
   id: store.id,
-  email: store.email,
+  email: store.owners?.email ?? store.email,
   businessName: store.business_name,
   phoneNumber: store.phone_number,
   storePhoneNumber: store.store_phone_number,

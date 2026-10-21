@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { OwnerStoresController } from './owner-stores.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthThrottlerGuard } from './guards/auth-throttler.guard';
@@ -35,7 +36,7 @@ import { TokenService } from './services/token.service';
       ],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, OwnerStoresController],
   providers: [
     AuthService,
     AuthThrottlerGuard,

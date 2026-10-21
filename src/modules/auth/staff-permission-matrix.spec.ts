@@ -11,6 +11,7 @@ import { StoresController } from '../stores/stores.controller';
 import { UploadsController } from '../uploads/uploads.controller';
 import { STAFF_ALLOWED_KEY } from './decorators/staff-allowed.decorator';
 import { AuthController } from './auth.controller';
+import { OwnerStoresController } from './owner-stores.controller';
 
 /**
  * 직원 권한표(PRD F-024)를 코드로 고정한다.
@@ -45,6 +46,8 @@ const STAFF_ALLOWED: Record<string, string[]> = {
   // 직원 기기도 새 예약·취소 푸시를 받는다
   StorePushDevicesController: ['register', 'unregister'],
   AuthController: [],
+  // 다매장 목록·전환·추가는 점주 전용(F-026)
+  OwnerStoresController: [],
 };
 
 const CONTROLLERS = [
@@ -59,6 +62,7 @@ const CONTROLLERS = [
   StoreStaffController,
   StorePushDevicesController,
   AuthController,
+  OwnerStoresController,
 ];
 
 const staffAllowedHandlers = (controller: { prototype: object }): string[] => {

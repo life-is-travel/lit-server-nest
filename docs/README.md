@@ -84,6 +84,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | F-023 | 사진 업로드(R2 프리사인)·짐 사진 | `*/uploads/presign`, `api/guest/reservations/*luggage-photos` | Should | 구현완료 |
 | F-024 | 직원 계정(초대코드)·직원 권한 | `api/store/staff`, `api/auth/staff/*` | Should | 구현예정 |
 | F-025 | 매장 앱 푸시 알림(새 예약·취소) | `api/store/push-devices` | Must | 구현완료 |
+| F-026 | 점주 계정 1개로 여러 매장(다매장)·매장 폐점 | `api/auth/login`, `api/auth/stores*`, `api/auth/store-closure` | Must | 구현완료 |
 
 ---
 
@@ -427,6 +428,37 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 - ✅ FCM이 `registration-token-not-registered`·`invalid-registration-token`으로 답한 토큰은 발송 직후 삭제한다.
 - ✅ 직원 해제·나가기 시 그 직원 기기 토큰을, 점주 탈퇴 시 매장의 모든 기기 토큰을 같은 트랜잭션에서 삭제한다.
 - ✅ `FIREBASE_SERVICE_ACCOUNT_BASE64`(서비스 계정 JSON의 base64)가 없으면 푸시 채널만 건너뛴다. 푸시 실패는 다른 알림 채널과 예약 결과에 영향을 주지 않는다(`channel: 'push_store'` error 로그).
+
+### F-026 점주 계정·다매장 (`api/auth/*`)
+**유저 스토리**: 매장을 여러 개 운영하는 점주로서 이메일 하나로 로그인해 매장을 오가고, 새 매장을 앱에서 추가하며, 매장 하나만 닫을 수도 있다. 모든 매장의 새 예약·취소 푸시를 한 휴대폰으로 받는다.
+
+**구조**
+- ✅ 로그인 주체는 `owners`(이메일·비밀번호·로그인 잠금)이고, `stores.owner_id`로 점주 1명이 매장 N개를 가진다. 매장 단위 토큰(access·refresh, `storeId` 포함)과 그 밖의 점주 API는 그대로다.
+- ✅ 마이그레이션은 `closed_at IS NULL`인 매장마다 점주를 1명씩 만든다(`id = owner_<storeId>`, 이메일·비밀번호 해시·로그인 잠금 값 복사). 같은 사람의 매장 합치기는 운영 SQL로 따로 한다.
+- ✅ `stores.email`·`stores.password_hash`는 더 이상 로그인에 쓰지 않는다(NULL 허용, 롤백 대비로 기존 값은 남김). 앱에서 추가한 매장은 `stores.email = NULL`이다.
+- ✅ 직원(F-024)은 지금처럼 매장 단위다.
+
+**로그인·매장 선택**
+- ✅ `POST /api/auth/login`은 점주 이메일·비밀번호를 확인하고(잠금 정책은 F-001과 같고 `owners`에 기록), 열린 매장 중 `last_login_at`이 가장 최근인 매장(같으면 먼저 만든 매장)의 토큰을 발급한다. 응답은 기존 형식에 `stores: [{ storeId, businessName, profileImageUrl, hasCompletedSetup }]`(열린 매장, 만든 순)를 더한다.
+- ✅ 열린 매장이 하나도 없는 점주(탈퇴 등)는 로그인할 수 없다(401 `AUTHENTICATION_FAILED`).
+- ✅ `GET /api/auth/stores`(점주 토큰)는 같은 점주의 열린 매장 목록을 준다.
+- ✅ `POST /api/auth/stores/:storeId/session`(점주 토큰, 본문 `{ refreshToken? }`)은 같은 점주의 열린 매장이면 그 매장 토큰을 새로 발급하고(응답 형식은 로그인과 같음), 본문의 이전 refresh 토큰이 같은 점주 매장 것이면 지운다. 다른 점주 매장이거나 닫힌 매장이면 404 `STORE_NOT_FOUND`.
+- ✅ 직원 토큰은 위 매장 API를 쓸 수 없다(403 `OWNER_ONLY`).
+
+**매장 추가**
+- ✅ `POST /api/auth/stores`(점주 토큰, 본문은 회원가입에서 이메일·비밀번호를 뺀 매장 정보)는 같은 점주 아래 새 매장을 만들고(영업 상태 `closed`, 설정 기본값, 사업자번호 중복 검사는 가입과 같음) 그 매장 토큰을 발급한다(응답 형식은 로그인과 같음). 이메일 인증은 다시 하지 않는다.
+
+**비밀번호·회원가입**
+- ✅ 비밀번호 변경(`PATCH /api/auth/password`)은 점주 비밀번호를 바꾸고 그 점주 **모든 매장**의 점주 refresh 토큰을 지운다(직원 세션은 유지).
+- ✅ 회원가입(`register`)은 점주와 첫 매장을 함께 만든다. 이메일 중복·인증 발송 검사는 `owners.email` 기준이다.
+
+**회원탈퇴·매장 폐점**
+- ✅ 회원탈퇴(`POST /api/auth/withdraw`)는 점주 계정을 지우는 것이다. 그 점주의 열린 매장 전체에 진행 중 예약이 하나라도 있으면 409 `ACTIVE_RESERVATIONS_EXIST`(`details.count` = 전체 합). 성공하면 모든 매장을 F-001 탈퇴 규칙대로 익명화·폐점하고, 점주는 이메일 `withdrawn_<ownerId>@withdrawn.invalid`·로그인 불가 해시·`withdrawn_at`으로 익명화하며, 점주 기기 푸시 토큰을 지운다. 같은 이메일로 다시 가입할 수 있다.
+- ✅ 매장 폐점(`POST /api/auth/store-closure`, 점주 토큰, 본문 `{ password }`)은 토큰의 매장 하나만 같은 규칙으로 익명화·폐점한다. 비밀번호 불일치 401 `INVALID_CURRENT_PASSWORD`, 진행 중 예약 409 `ACTIVE_RESERVATIONS_EXIST`, **점주의 마지막 열린 매장이면 409 `LAST_STORE`**(회원탈퇴를 안내). 인증 API와 같은 레이트리밋이다.
+
+**푸시(F-025 변경)**
+- ✅ 점주 기기는 `store_push_devices.owner_id`로 저장되어, 지금 어느 매장으로 들어가 있든 **그 점주의 모든 매장** 새 예약·취소를 받는다. 직원 기기는 자기 매장만 받는다.
+- ✅ 푸시 제목 앞에 `[매장명]`을 붙이고, `data`에 `storeId`를 넣는다.
 
 ---
 

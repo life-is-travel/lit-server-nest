@@ -92,3 +92,24 @@ export class RefreshAccessTokenResponseDto {
   @ApiProperty({ example: 3600 })
   expiresIn: number;
 }
+
+/** 점주가 가진 열린 매장(F-026) */
+export class OwnerStoreSummaryDto {
+  @ApiProperty()
+  storeId: string;
+
+  @ApiProperty()
+  businessName: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  profileImageUrl: string | null;
+
+  @ApiProperty()
+  hasCompletedSetup: boolean;
+}
+
+/** 로그인·매장 전환·매장 추가 응답: 매장 토큰 + 점주의 매장 목록 */
+export class OwnerSessionResponseDto extends AuthTokenResponseDto {
+  @ApiProperty({ type: [OwnerStoreSummaryDto] })
+  stores: OwnerStoreSummaryDto[];
+}
