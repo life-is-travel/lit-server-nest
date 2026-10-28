@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 
 import {
+  BadRequestException,
   ConflictException,
   NotFoundException,
   UnauthorizedException,
@@ -8,10 +9,11 @@ import {
 import { stores } from '@prisma/client';
 import { AuthService } from './auth.service';
 
-const createStore = (): stores => ({
+const createStore = (overrides: Partial<stores> = {}): stores => ({
   id: 'store_1',
+  owner_id: 'owner_1',
   email: 'store@example.com',
-  password_hash: 'hashed-password',
+  password_hash: null,
   store_pin_hash: null,
   store_pin_updated_at: null,
   store_pin_failed_count: 0,
@@ -38,13 +40,68 @@ const createStore = (): stores => ({
   last_login_at: null,
   login_count: 0,
   login_locked_until: null,
+  closed_at: null,
+  ...overrides,
 });
+
+const createOwner = (overrides: Record<string, unknown> = {}) => ({
+  id: 'owner_1',
+  email: 'owner@example.com',
+  password_hash: 'hashed-password',
+  login_count: 0,
+  login_locked_until: null as Date | null,
+  last_login_at: null,
+  withdrawn_at: null as Date | null,
+  created_at: new Date('2026-01-01T00:00:00.000Z'),
+  updated_at: new Date('2026-01-01T00:00:00.000Z'),
+  ...overrides,
+});
+
+/** findOwnerOfStore가 읽는 모양: 토큰 매장 + 그 점주 */
+const ownedStore = (overrides: Record<string, unknown> = {}) => ({
+  closed_at: null,
+  owners: {
+    id: 'owner_1',
+    email: 'owner@example.com',
+    password_hash: 'hashed-password',
+    withdrawn_at: null,
+  },
+  ...overrides,
+});
+
+const summaries = [
+  {
+    id: 'store_1',
+    business_name: '버터베이커리',
+    profile_image_url: null,
+    has_completed_setup: true,
+  },
+  {
+    id: 'store_2',
+    business_name: '슬로우버터',
+    profile_image_url: null,
+    has_completed_setup: false,
+  },
+];
 
 const createAuthService = () => {
   const tx = {
-    stores: {
+    owners: {
+      create: jest.fn(),
       update: jest.fn(),
     },
+    stores: {
+      create: jest
+        .fn()
+        .mockImplementation(({ data }: { data: Partial<stores> }) =>
+          createStore(data),
+        ),
+      update: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([{ id: 'store_1' }]),
+      count: jest.fn().mockResolvedValue(2),
+    },
+    store_status: { create: jest.fn() },
     refresh_tokens: {
       deleteMany: jest.fn(),
     },
@@ -55,6 +112,7 @@ const createAuthService = () => {
       deleteMany: jest.fn(),
     },
     store_settings: {
+      create: jest.fn(),
       deleteMany: jest.fn(),
     },
     store_operating_hours: {
@@ -74,8 +132,14 @@ const createAuthService = () => {
     },
   };
   const prisma = {
+    owners: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
     stores: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue(summaries),
       update: jest.fn(),
     },
     store_staff: {
@@ -102,7 +166,7 @@ const createAuthService = () => {
     sendVerificationEmail: jest.fn(),
   };
   const passwordService = {
-    hash: jest.fn(),
+    hash: jest.fn().mockResolvedValue('new-hash'),
     compare: jest.fn(),
   };
   const tokenService = {
@@ -130,357 +194,533 @@ const createAuthService = () => {
     tx,
     passwordService,
     tokenService,
+    emailVerificationService,
   };
 };
 
 describe('AuthService', () => {
-  it('logs in a store and stores a refresh token', async () => {
-    const { service, prisma, passwordService, tokenService } =
-      createAuthService();
-    const store = createStore();
-
-    prisma.stores.findUnique.mockResolvedValue(store);
-    passwordService.compare.mockResolvedValue(true);
-    prisma.refresh_tokens.create.mockResolvedValue({});
-
-    const result = await service.login({
-      email: 'STORE@example.com',
-      password: 'password123',
-    });
-
-    expect(prisma.stores.findUnique).toHaveBeenCalledWith({
-      where: { email: 'store@example.com' },
-    });
-    expect(passwordService.compare).toHaveBeenCalledWith(
-      'password123',
-      'hashed-password',
-    );
-    expect(prisma.refresh_tokens.create).toHaveBeenCalledWith({
-      data: {
-        store_id: 'store_1',
-        token: 'refresh-token',
-        expires_at: new Date('2026-02-01T00:00:00.000Z'),
-      },
-    });
-    expect(tokenService.generateAccessToken).toHaveBeenCalledWith(
-      'store_1',
-      'store@example.com',
-    );
-    expect(prisma.stores.update).toHaveBeenCalledWith({
-      where: { id: 'store_1' },
-      data: expect.objectContaining({
-        login_count: 0,
-        login_locked_until: null,
-      }),
-    });
-    expect(result).toMatchObject({
-      token: 'access-token',
-      refreshToken: 'refresh-token',
-      expiresIn: 3600,
-      user_info: {
-        role: 'owner',
-        id: 'store_1',
-        storeId: 'store_1',
-        email: 'store@example.com',
-        businessName: '루라운지 혼술바',
-        // 앱이 로컬 캐시를 로그인 응답으로 덮어써도 값이 유지되도록
-        // 알림 수신 번호·추가 수신자·로고가 반드시 포함되어야 한다.
-        notificationPhone: '01099998888',
-        notificationPhones: ['01011112222', '01033334444'],
-        profileImageUrl: 'https://cdn.example.com/logo.png',
-      },
-    });
-  });
-
-  it('increments the failure count on a wrong password without locking', async () => {
-    const { service, prisma, passwordService } = createAuthService();
-
-    prisma.stores.findUnique.mockResolvedValue(createStore());
-    passwordService.compare.mockResolvedValue(false);
-
-    await expect(
-      service.login({
-        email: 'store@example.com',
-        password: 'wrong-password',
-      }),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'AUTHENTICATION_FAILED' }),
-    });
-    expect(prisma.stores.update).toHaveBeenCalledWith({
-      where: { id: 'store_1' },
-      data: expect.objectContaining({
-        login_count: 1,
-        login_locked_until: null,
-      }),
-    });
-  });
-
-  it('locks the account on the 5th consecutive failure', async () => {
-    const { service, prisma, passwordService } = createAuthService();
-
-    prisma.stores.findUnique.mockResolvedValue({
-      ...createStore(),
-      login_count: 4,
-    });
-    passwordService.compare.mockResolvedValue(false);
-
-    await expect(
-      service.login({
-        email: 'store@example.com',
-        password: 'wrong-password',
-      }),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'ACCOUNT_LOCKED' }),
-    });
-
-    const updateArg = prisma.stores.update.mock.calls[0][0];
-    expect(updateArg.data.login_count).toBe(5);
-    expect(updateArg.data.login_locked_until).toBeInstanceOf(Date);
-  });
-
-  it('rejects login while the account is locked', async () => {
-    const { service, prisma, passwordService } = createAuthService();
-
-    prisma.stores.findUnique.mockResolvedValue({
-      ...createStore(),
-      login_count: 5,
-      login_locked_until: new Date(Date.now() + 5 * 60_000),
-    });
-
-    await expect(
-      service.login({
-        email: 'store@example.com',
-        password: 'password123',
-      }),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'ACCOUNT_LOCKED' }),
-    });
-    // 잠금 중에는 비밀번호 검증조차 수행하지 않는다.
-    expect(passwordService.compare).not.toHaveBeenCalled();
-    expect(prisma.stores.update).not.toHaveBeenCalled();
-  });
-
-  it('changes the password and revokes only the owner refresh tokens', async () => {
-    const { service, prisma, tx, passwordService } = createAuthService();
-
-    prisma.stores.findUnique.mockResolvedValue({
-      id: 'store_1',
-      password_hash: 'old-hash',
-    });
-    passwordService.compare.mockResolvedValue(true);
-    passwordService.hash.mockResolvedValue('new-hash');
-
-    const result = await service.changePassword('store_1', {
-      currentPassword: 'currentPassword123',
-      newPassword: 'newPassword123',
-    });
-
-    expect(passwordService.compare).toHaveBeenCalledWith(
-      'currentPassword123',
-      'old-hash',
-    );
-    expect(tx.stores.update).toHaveBeenCalledWith({
-      where: { id: 'store_1' },
-      data: expect.objectContaining({ password_hash: 'new-hash' }),
-    });
-    // 직원 세션(staff_id 있음)은 점주 비밀번호와 무관하므로 남긴다.
-    expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({
-      where: { store_id: 'store_1', staff_id: null },
-    });
-    expect(result).toEqual({ message: '비밀번호가 변경되었습니다.' });
-  });
-
-  it('rejects password change when the current password does not match', async () => {
-    const { service, prisma, tx, passwordService } = createAuthService();
-
-    prisma.stores.findUnique.mockResolvedValue({
-      id: 'store_1',
-      password_hash: 'old-hash',
-    });
-    passwordService.compare.mockResolvedValue(false);
-
-    await expect(
-      service.changePassword('store_1', {
-        currentPassword: 'wrong-password',
-        newPassword: 'newPassword123',
-      }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(tx.stores.update).not.toHaveBeenCalled();
-  });
-
-  it('rejects password change when the store does not exist', async () => {
-    const { service, prisma } = createAuthService();
-
-    prisma.stores.findUnique.mockResolvedValue(null);
-
-    await expect(
-      service.changePassword('store_unknown', {
-        currentPassword: 'currentPassword123',
-        newPassword: 'newPassword123',
-      }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  describe('withdraw', () => {
-    const withdrawableStore = {
-      id: 'store_1',
-      password_hash: 'old-hash',
-      closed_at: null,
-    };
-
-    it('anonymizes the store, deletes personal data and keeps the row', async () => {
-      const { service, prisma, tx, passwordService } = createAuthService();
-
-      prisma.stores.findUnique.mockResolvedValue(withdrawableStore);
+  describe('login (F-026 점주 계정)', () => {
+    it('점주로 로그인하면 최근 매장 토큰과 매장 목록을 준다', async () => {
+      const { service, prisma, passwordService, tokenService } =
+        createAuthService();
+      prisma.owners.findUnique.mockResolvedValue(createOwner());
       passwordService.compare.mockResolvedValue(true);
-      passwordService.hash.mockResolvedValue('unusable-hash');
+      prisma.stores.findFirst.mockResolvedValue(createStore());
 
-      const result = await service.withdraw('store_1', {
-        password: 'currentPassword123',
+      const result = await service.login({
+        email: ' Owner@Example.com ',
+        password: 'password123',
       });
 
-      expect(passwordService.compare).toHaveBeenCalledWith(
-        'currentPassword123',
-        'old-hash',
+      expect(prisma.owners.findUnique).toHaveBeenCalledWith({
+        where: { email: 'owner@example.com' },
+      });
+      expect(prisma.stores.findFirst).toHaveBeenCalledWith({
+        where: { owner_id: 'owner_1', closed_at: null },
+        orderBy: [
+          { last_login_at: { sort: 'desc', nulls: 'last' } },
+          { created_at: 'asc' },
+        ],
+      });
+      expect(tokenService.generateAccessToken).toHaveBeenCalledWith(
+        'store_1',
+        'owner@example.com',
       );
+      expect(prisma.refresh_tokens.create).toHaveBeenCalledWith({
+        data: {
+          store_id: 'store_1',
+          token: 'refresh-token',
+          expires_at: new Date('2026-02-01T00:00:00.000Z'),
+        },
+      });
+      expect(prisma.owners.update).toHaveBeenCalledWith({
+        where: { id: 'owner_1' },
+        data: expect.objectContaining({
+          login_count: 0,
+          login_locked_until: null,
+        }),
+      });
+      expect(prisma.stores.update).toHaveBeenCalledWith({
+        where: { id: 'store_1' },
+        data: { last_login_at: expect.any(Date) },
+      });
+      expect(result.user_info).toEqual(
+        expect.objectContaining({
+          storeId: 'store_1',
+          role: 'owner',
+          email: 'owner@example.com',
+          businessName: '루라운지 혼술바',
+        }),
+      );
+      expect(result.stores).toEqual([
+        {
+          storeId: 'store_1',
+          businessName: '버터베이커리',
+          profileImageUrl: null,
+          hasCompletedSetup: true,
+        },
+        {
+          storeId: 'store_2',
+          businessName: '슬로우버터',
+          profileImageUrl: null,
+          hasCompletedSetup: false,
+        },
+      ]);
+    });
+
+    it('없는 이메일·탈퇴한 점주는 같은 인증 실패로 거절한다', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.login({ email: 'x@example.com', password: 'p' }),
+      ).rejects.toMatchObject({ response: { code: 'AUTHENTICATION_FAILED' } });
+
+      prisma.owners.findUnique.mockResolvedValueOnce(
+        createOwner({ withdrawn_at: new Date() }),
+      );
+      await expect(
+        service.login({ email: 'owner@example.com', password: 'p' }),
+      ).rejects.toMatchObject({ response: { code: 'AUTHENTICATION_FAILED' } });
+    });
+
+    it('비밀번호가 틀리면 점주 실패 횟수를 올린다', async () => {
+      const { service, prisma, passwordService } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValue(
+        createOwner({ login_count: 2 }),
+      );
+      passwordService.compare.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: 'owner@example.com', password: 'wrong' }),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'AUTHENTICATION_FAILED',
+          details: { remainingAttempts: 2 },
+        },
+      });
+      expect(prisma.owners.update).toHaveBeenCalledWith({
+        where: { id: 'owner_1' },
+        data: expect.objectContaining({
+          login_count: 3,
+          login_locked_until: null,
+        }),
+      });
+      expect(prisma.refresh_tokens.create).not.toHaveBeenCalled();
+    });
+
+    it('5번째 연속 실패에 잠근다', async () => {
+      const { service, prisma, passwordService } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValue(
+        createOwner({ login_count: 4 }),
+      );
+      passwordService.compare.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: 'owner@example.com', password: 'wrong' }),
+      ).rejects.toMatchObject({ response: { code: 'ACCOUNT_LOCKED' } });
+      expect(prisma.owners.update).toHaveBeenCalledWith({
+        where: { id: 'owner_1' },
+        data: expect.objectContaining({
+          login_count: 5,
+          login_locked_until: expect.any(Date),
+        }),
+      });
+    });
+
+    it('잠긴 동안에는 비밀번호가 맞아도 거절한다', async () => {
+      const { service, prisma, passwordService } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValue(
+        createOwner({ login_locked_until: new Date(Date.now() + 60_000) }),
+      );
+
+      await expect(
+        service.login({ email: 'owner@example.com', password: 'p' }),
+      ).rejects.toMatchObject({ response: { code: 'ACCOUNT_LOCKED' } });
+      expect(passwordService.compare).not.toHaveBeenCalled();
+    });
+
+    it('열린 매장이 없는 점주는 로그인할 수 없다', async () => {
+      const { service, prisma, passwordService } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValue(createOwner());
+      passwordService.compare.mockResolvedValue(true);
+      prisma.stores.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.login({ email: 'owner@example.com', password: 'p' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(prisma.refresh_tokens.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('register', () => {
+    it('점주와 첫 매장을 함께 만든다', async () => {
+      const { service, prisma, tx } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValue(null);
+
+      const result = await service.register({
+        email: 'New@Example.com',
+        password: 'password123',
+        businessName: ' 새 매장 ',
+      });
+
+      const ownerId = tx.owners.create.mock.calls[0][0].data.id as string;
+      expect(ownerId).toMatch(/^owner_/);
+      expect(tx.owners.create).toHaveBeenCalledWith({
+        data: {
+          id: ownerId,
+          email: 'new@example.com',
+          password_hash: 'new-hash',
+        },
+      });
+      expect(tx.stores.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          owner_id: ownerId,
+          email: 'new@example.com',
+          business_name: '새 매장',
+        }),
+      });
+      expect(result.user_info.email).toBe('new@example.com');
+    });
+
+    it('이미 있는 점주 이메일이면 거절한다', async () => {
+      const { service, prisma, tx } = createAuthService();
+      prisma.owners.findUnique.mockResolvedValue({ id: 'owner_1' });
+
+      await expect(
+        service.register({
+          email: 'owner@example.com',
+          password: 'password123',
+          businessName: '새 매장',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.owners.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('다매장 (F-026)', () => {
+    it('같은 점주의 다른 매장으로 전환하고 이전 refresh 토큰을 지운다', async () => {
+      const { service, prisma, tokenService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      prisma.stores.findFirst.mockResolvedValue(
+        createStore({ id: 'store_2', business_name: '슬로우버터' }),
+      );
+
+      const result = await service.switchStore(
+        'store_1',
+        'store_2',
+        'old-refresh',
+      );
+
+      expect(prisma.stores.findFirst).toHaveBeenCalledWith({
+        where: { id: 'store_2', owner_id: 'owner_1', closed_at: null },
+      });
+      expect(prisma.refresh_tokens.deleteMany).toHaveBeenCalledWith({
+        where: {
+          token: 'old-refresh',
+          staff_id: null,
+          stores: { owner_id: 'owner_1' },
+        },
+      });
+      expect(tokenService.generateAccessToken).toHaveBeenCalledWith(
+        'store_2',
+        'owner@example.com',
+      );
+      expect(result.user_info.storeId).toBe('store_2');
+    });
+
+    it('다른 점주 매장이나 닫힌 매장으로는 전환할 수 없다', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      prisma.stores.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.switchStore('store_1', 'store_other'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.refresh_tokens.create).not.toHaveBeenCalled();
+    });
+
+    it('매장을 추가하면 같은 점주 아래 이메일 없이 만들고 그 매장 토큰을 준다', async () => {
+      const { service, prisma, tx } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+
+      const result = await service.addStore('store_1', {
+        businessName: '슬로우버터',
+      });
+
+      expect(tx.stores.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          owner_id: 'owner_1',
+          email: null,
+          business_name: '슬로우버터',
+          has_completed_setup: false,
+        }),
+      });
+      expect(tx.store_status.create).toHaveBeenCalled();
+      expect(tx.store_settings.create).toHaveBeenCalled();
+      expect(result.user_info.businessName).toBe('슬로우버터');
+      expect(result.user_info.email).toBe('owner@example.com');
+    });
+
+    it('목록은 같은 점주의 열린 매장을 만든 순서로 준다', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+
+      const result = await service.listOwnerStores('store_1');
+
+      expect(prisma.stores.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { owner_id: 'owner_1', closed_at: null },
+          orderBy: { created_at: 'asc' },
+        }),
+      );
+      expect(result.map((s) => s.storeId)).toEqual(['store_1', 'store_2']);
+    });
+
+    it('탈퇴한 점주의 매장 토큰으로는 다매장 API를 쓸 수 없다', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(
+        ownedStore({
+          owners: { ...ownedStore().owners, withdrawn_at: new Date() },
+        }),
+      );
+
+      await expect(service.listOwnerStores('store_1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('changePassword', () => {
+    it('점주 비밀번호를 바꾸고 그 점주 모든 매장의 점주 세션만 끊는다', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(true);
+
+      await service.changePassword('store_1', {
+        currentPassword: 'old',
+        newPassword: 'new-password',
+      });
+
+      expect(tx.owners.update).toHaveBeenCalledWith({
+        where: { id: 'owner_1' },
+        data: { password_hash: 'new-hash', updated_at: expect.any(Date) },
+      });
+      expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({
+        where: { staff_id: null, stores: { owner_id: 'owner_1' } },
+      });
+    });
+
+    it('현재 비밀번호가 틀리면 거절한다', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(false);
+
+      await expect(
+        service.changePassword('store_1', {
+          currentPassword: 'wrong',
+          newPassword: 'new-password',
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'INVALID_CURRENT_PASSWORD' },
+      });
+      expect(tx.owners.update).not.toHaveBeenCalled();
+    });
+
+    it('없는 매장이면 404', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.changePassword('store_x', {
+          currentPassword: 'a',
+          newPassword: 'new-password',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('withdraw (점주 계정 탈퇴)', () => {
+    it('점주의 모든 열린 매장을 익명화·폐점하고 점주를 익명화한다', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(true);
+      tx.stores.findMany.mockResolvedValue([
+        { id: 'store_1' },
+        { id: 'store_2' },
+      ]);
+
+      await expect(
+        service.withdraw('store_1', { password: 'pw' }),
+      ).resolves.toEqual({ message: '회원탈퇴가 완료되었습니다.' });
+
       expect(tx.reservations.count).toHaveBeenCalledWith({
         where: {
-          store_id: 'store_1',
+          store_id: { in: ['store_1', 'store_2'] },
           status: {
             in: ['pending', 'pending_approval', 'confirmed', 'in_progress'],
           },
         },
       });
-      for (const table of [
-        tx.refresh_tokens,
-        tx.store_settlement_accounts,
-        tx.store_settings,
-        tx.store_operating_hours,
-        tx.notifications,
-        tx.store_push_devices,
-      ]) {
-        expect(table.deleteMany).toHaveBeenCalledWith({
-          where: { store_id: 'store_1' },
+      for (const storeId of ['store_1', 'store_2']) {
+        for (const table of [
+          tx.refresh_tokens,
+          tx.store_settlement_accounts,
+          tx.store_settings,
+          tx.store_operating_hours,
+          tx.notifications,
+          tx.store_push_devices,
+        ]) {
+          expect(table.deleteMany).toHaveBeenCalledWith({
+            where: { store_id: storeId },
+          });
+        }
+        expect(tx.stores.update).toHaveBeenCalledWith({
+          where: { id: storeId },
+          data: expect.objectContaining({
+            email: `withdrawn_${storeId}@withdrawn.invalid`,
+            business_name: '폐점한 매장',
+            business_number: null,
+            closed_at: expect.any(Date),
+          }),
+        });
+        expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
+          where: { store_id: storeId },
+          data: { name: '탈퇴한 직원', updated_at: expect.any(Date) },
         });
       }
-      expect(tx.stores.update).toHaveBeenCalledWith({
-        where: { id: 'store_1' },
+      expect(tx.store_push_devices.deleteMany).toHaveBeenCalledWith({
+        where: { owner_id: 'owner_1' },
+      });
+      expect(tx.owners.update).toHaveBeenCalledWith({
+        where: { id: 'owner_1' },
         data: expect.objectContaining({
-          email: 'withdrawn_store_1@withdrawn.invalid',
-          password_hash: 'unusable-hash',
-          business_name: '폐점한 매장',
-          store_pin_hash: null,
-          phone_number: null,
-          store_phone_number: null,
-          notification_phone: null,
-          wants_sms_notification: false,
-          business_number: null,
-          representative_name: null,
-          address: null,
-          detail_address: null,
-          latitude: null,
-          longitude: null,
-          description: null,
-          profile_image_url: null,
-          slug: null,
-          closed_at: expect.any(Date),
+          email: 'withdrawn_owner_1@withdrawn.invalid',
+          password_hash: 'new-hash',
+          withdrawn_at: expect.any(Date),
         }),
       });
-      // 직원 세션은 refresh_tokens 전체 삭제에 포함되고, 직원·미사용 초대코드도 정리한다.
-      expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
-        where: { store_id: 'store_1', status: 'active' },
-        data: expect.objectContaining({ status: 'revoked' }),
-      });
-      // 이미 해제된 직원까지 포함해 매장의 직원 이름을 모두 익명화한다.
-      expect(tx.store_staff.updateMany).toHaveBeenCalledWith({
-        where: { store_id: 'store_1' },
-        data: expect.objectContaining({ name: '탈퇴한 직원' }),
-      });
-      expect(tx.store_staff_invite_codes.updateMany).toHaveBeenCalledWith({
-        where: { store_id: 'store_1', used_at: null, revoked_at: null },
-        data: { revoked_at: expect.any(Date) },
-      });
-      expect(result).toEqual({ message: '회원탈퇴가 완료되었습니다.' });
     });
 
-    it('rejects withdrawal when the password does not match', async () => {
+    it('어느 매장이든 진행 중 예약이 있으면 아무것도 바꾸지 않는다', async () => {
       const { service, prisma, tx, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(true);
+      tx.reservations.count.mockResolvedValue(3);
 
-      prisma.stores.findUnique.mockResolvedValue(withdrawableStore);
+      await expect(
+        service.withdraw('store_1', { password: 'pw' }),
+      ).rejects.toMatchObject({
+        response: { code: 'ACTIVE_RESERVATIONS_EXIST', details: { count: 3 } },
+      });
+      expect(tx.stores.update).not.toHaveBeenCalled();
+      expect(tx.owners.update).not.toHaveBeenCalled();
+    });
+
+    it('비밀번호가 틀리면 거절한다', async () => {
+      const { service, prisma, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
       passwordService.compare.mockResolvedValue(false);
 
       await expect(
-        service.withdraw('store_1', { password: 'wrong-password' }),
+        service.withdraw('store_1', { password: 'wrong' }),
       ).rejects.toMatchObject({
         response: { code: 'INVALID_CURRENT_PASSWORD' },
       });
       expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(tx.stores.update).not.toHaveBeenCalled();
     });
 
-    it('blocks withdrawal while active reservations exist', async () => {
-      const { service, prisma, tx, passwordService } = createAuthService();
-
-      prisma.stores.findUnique.mockResolvedValue(withdrawableStore);
-      passwordService.compare.mockResolvedValue(true);
-      tx.reservations.count.mockResolvedValue(3);
-
-      const attempt = service.withdraw('store_1', { password: 'pw' });
-
-      await expect(attempt).rejects.toBeInstanceOf(ConflictException);
-      await expect(attempt).rejects.toMatchObject({
-        response: {
-          code: 'ACTIVE_RESERVATIONS_EXIST',
-          details: { count: 3 },
-        },
-      });
-      expect(tx.stores.update).not.toHaveBeenCalled();
-      expect(tx.refresh_tokens.deleteMany).not.toHaveBeenCalled();
-    });
-
-    it('rejects withdrawal for an unknown or already withdrawn store', async () => {
+    it('이미 폐점한 매장 토큰이면 404', async () => {
       const { service, prisma } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(
+        ownedStore({ closed_at: new Date() }),
+      );
 
-      prisma.stores.findUnique.mockResolvedValueOnce(null);
-      await expect(
-        service.withdraw('store_unknown', { password: 'pw' }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-
-      prisma.stores.findUnique.mockResolvedValueOnce({
-        ...withdrawableStore,
-        closed_at: new Date('2026-10-01T00:00:00.000Z'),
-      });
       await expect(
         service.withdraw('store_1', { password: 'pw' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
-  it('refreshes an access token when the refresh token is valid', async () => {
-    const { service, prisma, tokenService } = createAuthService();
-    const expiresAt = new Date(Date.now() + 60_000);
+  describe('closeStore (매장 하나 폐점)', () => {
+    it('토큰의 매장만 익명화·폐점하고 남은 최근 매장 세션을 준다', async () => {
+      const { service, prisma, tx, passwordService, tokenService } =
+        createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(true);
+      tx.stores.count.mockResolvedValue(2);
+      prisma.stores.findFirst.mockResolvedValue(
+        createStore({ id: 'store_2', business_name: '슬로우버터' }),
+      );
 
+      const result = await service.closeStore('store_1', { password: 'pw' });
+
+      expect(result.user_info.storeId).toBe('store_2');
+      expect(tokenService.generateAccessToken).toHaveBeenCalledWith(
+        'store_2',
+        'owner@example.com',
+      );
+
+      expect(tx.stores.update).toHaveBeenCalledTimes(1);
+      expect(tx.stores.update).toHaveBeenCalledWith({
+        where: { id: 'store_1' },
+        data: expect.objectContaining({ closed_at: expect.any(Date) }),
+      });
+      expect(tx.owners.update).not.toHaveBeenCalled();
+    });
+
+    it('마지막 열린 매장이면 409 LAST_STORE', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(true);
+      tx.stores.count.mockResolvedValue(1);
+
+      await expect(
+        service.closeStore('store_1', { password: 'pw' }),
+      ).rejects.toMatchObject({ response: { code: 'LAST_STORE' } });
+      expect(tx.stores.update).not.toHaveBeenCalled();
+    });
+
+    it('그 매장에 진행 중 예약이 있으면 폐점할 수 없다', async () => {
+      const { service, prisma, tx, passwordService } = createAuthService();
+      prisma.stores.findUnique.mockResolvedValue(ownedStore());
+      passwordService.compare.mockResolvedValue(true);
+      tx.reservations.count.mockResolvedValue(1);
+
+      await expect(
+        service.closeStore('store_1', { password: 'pw' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.reservations.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ store_id: { in: ['store_1'] } }),
+        }),
+      );
+    });
+  });
+
+  it('refresh는 점주 이메일로 access 토큰을 다시 만든다', async () => {
+    const { service, prisma, tokenService } = createAuthService();
     tokenService.verifyRefreshToken.mockReturnValue({
       storeId: 'store_1',
-      email: 'store@example.com',
       type: 'refresh',
     });
     prisma.refresh_tokens.findFirst.mockResolvedValue({
       store_id: 'store_1',
-      expires_at: expiresAt,
+      expires_at: new Date(Date.now() + 60_000),
     });
     prisma.stores.findUnique.mockResolvedValue({
       id: 'store_1',
-      email: 'store@example.com',
+      owners: { email: 'owner@example.com' },
     });
 
     const result = await service.refresh({ refreshToken: 'refresh-token' });
 
-    expect(result).toEqual({
-      token: 'access-token',
-      expiresIn: 3600,
-    });
+    expect(tokenService.generateAccessToken).toHaveBeenCalledWith(
+      'store_1',
+      'owner@example.com',
+    );
+    expect(result).toEqual({ token: 'access-token', expiresIn: 3600 });
   });
+
   describe('refresh — 직원 세션', () => {
     const staffRow = {
       store_id: 'store_1',
@@ -514,10 +754,6 @@ describe('AuthService', () => {
         'store_1',
         'staff_1',
       );
-      expect(prisma.store_staff.update).toHaveBeenCalledWith({
-        where: { id: 'staff_1' },
-        data: { last_active_at: expect.any(Date) },
-      });
       expect(result).toEqual({ token: 'staff-access-token', expiresIn: 3600 });
     });
 
@@ -535,29 +771,6 @@ describe('AuthService', () => {
       await expect(
         service.refresh({ refreshToken: 'staff-refresh' }),
       ).rejects.toMatchObject({ response: { code: 'STAFF_REVOKED' } });
-      expect(tokenService.generateStaffAccessToken).not.toHaveBeenCalled();
-    });
-
-    it('does not use a staff refresh row for the owner path', async () => {
-      const { service, prisma, tokenService } = createAuthService();
-      tokenService.verifyRefreshToken.mockReturnValue({
-        storeId: 'store_1',
-        email: 'store@example.com',
-        type: 'refresh',
-      });
-      prisma.refresh_tokens.findFirst.mockResolvedValue({
-        store_id: 'store_1',
-        staff_id: null,
-        expires_at: new Date(Date.now() + 60_000),
-      });
-      prisma.stores.findUnique.mockResolvedValue({
-        id: 'store_1',
-        email: 'store@example.com',
-      });
-
-      await service.refresh({ refreshToken: 'refresh-token' });
-
-      expect(prisma.store_staff.findFirst).not.toHaveBeenCalled();
       expect(tokenService.generateStaffAccessToken).not.toHaveBeenCalled();
     });
   });

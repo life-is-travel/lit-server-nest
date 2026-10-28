@@ -343,16 +343,20 @@ export class NotificationsService {
     ]);
   }
 
-  // ─── 매장 앱 푸시 (점주·직원 기기, 문구는 점주 알림톡처럼 KO 고정) ─────────
+  // ─── 매장 앱 푸시 (점주·직원 기기, 문구는 점주 알림톡처럼 KO 고정, 제목에 [매장명]) ─
 
   private async sendCreatePushToStore(
     data: CreateNotificationData,
   ): Promise<void> {
     const luggage = buildLuggageListFromItems(data.luggageItems, 'ko');
     await this.storePushService.notifyStore(data.storeId, {
-      title: '새 예약이 들어왔어요',
+      title: `[${data.storeName}] 새 예약이 들어왔어요`,
       body: `${data.customerName} · ${luggage} · ${formatKoreanDateTime(data.startTime)}`,
-      data: { type: 'reservation_created', reservationId: data.reservationId },
+      data: {
+        type: 'reservation_created',
+        reservationId: data.reservationId,
+        storeId: data.storeId,
+      },
     });
   }
 
@@ -361,11 +365,12 @@ export class NotificationsService {
   ): Promise<void> {
     const count = data.cancelledCount > 1 ? ` ${data.cancelledCount}건` : '';
     await this.storePushService.notifyStore(data.storeId, {
-      title: '예약이 취소됐어요',
+      title: `[${data.storeName}] 예약이 취소됐어요`,
       body: `${formatKoreanDateTime(data.startTime)} 예약${count}이 취소됐어요.`,
       data: {
         type: 'reservation_cancelled',
         reservationId: data.reservationId,
+        storeId: data.storeId,
       },
     });
   }

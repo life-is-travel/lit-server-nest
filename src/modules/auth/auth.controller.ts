@@ -19,7 +19,7 @@ import { AuthThrottlerGuard } from './guards/auth-throttler.guard';
 import { StoreAuthGuard } from './guards/store-auth.guard';
 import { CurrentStoreId } from './decorators/current-store.decorator';
 import {
-  AuthTokenResponseDto,
+  OwnerSessionResponseDto,
   RefreshAccessTokenResponseDto,
 } from './dto/auth-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -56,15 +56,17 @@ export class AuthController {
 
   @Post('register')
   @ApiOperation({ summary: '매장 계정을 생성합니다.' })
-  @ApiCreatedResponse({ type: AuthTokenResponseDto })
+  @ApiCreatedResponse({ type: OwnerSessionResponseDto })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '매장 계정으로 로그인합니다.' })
-  @ApiOkResponse({ type: AuthTokenResponseDto })
+  @ApiOperation({
+    summary: '점주 계정으로 로그인합니다(최근 매장 토큰 + 매장 목록).',
+  })
+  @ApiOkResponse({ type: OwnerSessionResponseDto })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -103,10 +105,23 @@ export class AuthController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '매장 계정을 탈퇴(개인정보 익명화)하고 고객 노출을 중단합니다.',
+    summary: '점주 계정을 탈퇴하고 모든 매장을 폐점(개인정보 익명화)합니다.',
   })
   @ApiOkResponse()
   withdraw(@CurrentStoreId() storeId: string, @Body() dto: WithdrawDto) {
     return this.authService.withdraw(storeId, dto);
+  }
+
+  @Post('store-closure')
+  @UseGuards(StoreAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '지금 매장 하나만 폐점(익명화)하고 남은 최근 매장의 토큰을 발급합니다. 마지막 매장이면 409 LAST_STORE.',
+  })
+  @ApiOkResponse({ type: OwnerSessionResponseDto })
+  closeStore(@CurrentStoreId() storeId: string, @Body() dto: WithdrawDto) {
+    return this.authService.closeStore(storeId, dto);
   }
 }

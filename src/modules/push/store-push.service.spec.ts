@@ -3,6 +3,9 @@ import { StorePushService } from './store-push.service';
 
 const createService = (tokens: string[] = []) => {
   const prisma = {
+    stores: {
+      findUnique: jest.fn().mockResolvedValue({ owner_id: 'owner_1' }),
+    },
     store_push_devices: {
       upsert: jest.fn().mockResolvedValue(undefined),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -25,7 +28,7 @@ const message = {
 };
 
 describe('StorePushService', () => {
-  it('점주 기기는 staff_id 없이 토큰 기준으로 upsert한다', async () => {
+  it('점주 기기는 점주 계정(owner_id)에 묶어 토큰 기준으로 upsert한다', async () => {
     const { service, prisma } = createService();
 
     await service.registerDevice(
@@ -40,9 +43,14 @@ describe('StorePushService', () => {
         push_token: 'tok_1',
         store_id: 'store_1',
         staff_id: null,
+        owner_id: 'owner_1',
         platform: 'ios',
       }),
-      update: expect.objectContaining({ store_id: 'store_1', staff_id: null }),
+      update: expect.objectContaining({
+        store_id: 'store_1',
+        staff_id: null,
+        owner_id: 'owner_1',
+      }),
     });
   });
 
@@ -57,9 +65,14 @@ describe('StorePushService', () => {
 
     expect(prisma.store_push_devices.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ staff_id: 'staff_1' }),
+        update: expect.objectContaining({
+          staff_id: 'staff_1',
+          owner_id: null,
+        }),
       }),
     );
+    // 직원은 점주 조회 없이 매장 단위
+    expect(prisma.stores.findUnique).not.toHaveBeenCalled();
   });
 
   it('해제는 자기 매장의 토큰만 지운다', async () => {
@@ -72,15 +85,17 @@ describe('StorePushService', () => {
     });
   });
 
-  it('점주 기기와 활성 직원 기기만 조회해 발송한다', async () => {
+  it('매장 점주의 기기(어느 매장에 있든)와 이 매장 활성 직원 기기로 발송한다', async () => {
     const { service, prisma, fcmSender } = createService(['tok_1', 'tok_2']);
 
     await service.notifyStore('store_1', message);
 
     expect(prisma.store_push_devices.findMany).toHaveBeenCalledWith({
       where: {
-        store_id: 'store_1',
-        OR: [{ staff_id: null }, { store_staff: { status: 'active' } }],
+        OR: [
+          { owner_id: 'owner_1', staff_id: null },
+          { store_id: 'store_1', store_staff: { status: 'active' } },
+        ],
       },
       select: { push_token: true },
     });
