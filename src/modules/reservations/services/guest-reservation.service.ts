@@ -250,6 +250,7 @@ export class GuestReservationService {
     this.notificationsService
       .sendCreateNotification({
         reservationId: representativeId,
+        storeId: store.id,
         storeName: toGuestStoreName(store),
         storeAddress,
         ownerPhone,
@@ -659,6 +660,7 @@ export class GuestReservationService {
     this.notificationsService
       .sendCancelNotification({
         reservationId: representative.id,
+        storeId: representative.store_id,
         customerPhone: representative.customer_phone ?? '',
         storeName: store?.business_name ?? '',
         ownerPhone,

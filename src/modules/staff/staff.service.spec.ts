@@ -44,6 +44,9 @@ const createService = () => {
       create: jest.fn(),
       deleteMany: jest.fn(),
     },
+    store_push_devices: {
+      deleteMany: jest.fn(),
+    },
   };
   const prisma = {
     store_staff: {
@@ -173,6 +176,9 @@ describe('StaffService — 직원 관리', () => {
       data: expect.objectContaining({ status: 'revoked', revoked_at: NOW }),
     });
     expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({
+      where: { staff_id: 'staff_1' },
+    });
+    expect(tx.store_push_devices.deleteMany).toHaveBeenCalledWith({
       where: { staff_id: 'staff_1' },
     });
     expect(tx.store_staff_invite_codes.updateMany).toHaveBeenCalledWith({
@@ -351,6 +357,9 @@ describe('StaffService — 직원 시작·나가기', () => {
       }),
     });
     expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({
+      where: { staff_id: 'staff_1' },
+    });
+    expect(tx.store_push_devices.deleteMany).toHaveBeenCalledWith({
       where: { staff_id: 'staff_1' },
     });
   });
