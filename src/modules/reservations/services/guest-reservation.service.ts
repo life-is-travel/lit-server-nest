@@ -19,6 +19,7 @@ import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { resolveOwnerPhone } from '../../../common/transformers/resolve-owner-phone.util';
 import { MailService } from '../../auth/services/mail.service';
+import { loadReservationMailStoreInfo } from './reservation-mail-store';
 import {
   CancelGuestReservationDto,
   CleanupExpiredGuestReservationsResponseDto,
@@ -1166,16 +1167,25 @@ export class GuestReservationService {
       return;
     }
 
+    const storeInfo = await loadReservationMailStoreInfo(
+      this.prisma,
+      reservation.storeId,
+    );
+
     await this.mailService
       .sendReservationCreatedEmail(reservation.email, {
         reservationId: reservation.id,
         customerName: reservation.customerName,
         storeName: reservation.storeName,
+        store: storeInfo.store,
         locale: reservation.locale,
         startTime: reservation.startTime,
         endTime: reservation.endTime,
         bagCount: reservation.bagCount,
         totalAmount: reservation.totalAmount,
+        items: reservation.items,
+        hasStoreCoupon: storeInfo.hasStoreCoupon,
+        couponValidityDays: storeInfo.couponValidityDays,
         accessToken: reservation.accessToken,
       })
       .catch((error: unknown) => {
