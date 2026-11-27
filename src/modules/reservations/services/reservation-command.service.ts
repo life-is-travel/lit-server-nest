@@ -13,6 +13,7 @@ import {
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { MailService } from '../../auth/services/mail.service';
+import { loadReservationMailStoreInfo } from './reservation-mail-store';
 import { CouponAutoIssueService } from '../../coupons/services/coupon-auto-issue.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import {
@@ -588,11 +589,19 @@ export class ReservationCommandService {
       return;
     }
 
+    const storeInfo = await loadReservationMailStoreInfo(
+      this.prisma,
+      params.reservation.store_id,
+    );
+
     await this.mailService
       .sendReservationCreatedEmail(params.reservation.customer_email, {
         reservationId: params.reservation.id,
         customerName: params.reservation.customer_name,
         storeName: params.storeName,
+        store: storeInfo.store,
+        hasStoreCoupon: storeInfo.hasStoreCoupon,
+        couponValidityDays: storeInfo.couponValidityDays,
         locale: params.reservation.locale,
         startTime: params.reservation.start_time,
         endTime: params.reservation.end_time,
