@@ -85,6 +85,7 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 | F-024 | 직원 계정(초대코드)·직원 권한 | `api/store/staff`, `api/auth/staff/*` | Should | 구현예정 |
 | F-025 | 매장 앱 푸시 알림(새 예약·취소) | `api/store/push-devices` | Must | 구현완료 |
 | F-026 | 점주 계정 1개로 여러 매장(다매장)·매장 폐점 | `api/auth/login`, `api/auth/stores*`, `api/auth/store-closure` | Must | 구현완료 |
+| F-027 | 테스트 매장(내부 테스트·앱 심사용) 고객 목록 제외 | `api/customer/stores` | Must | 구현완료 |
 
 ---
 
@@ -459,6 +460,13 @@ MoSCoW 우선순위는 제품 핵심성을 기준으로 한 분류다.
 **푸시(F-025 변경)**
 - ✅ 점주 기기는 `store_push_devices.owner_id`로 저장되어, 지금 어느 매장으로 들어가 있든 **그 점주의 모든 매장** 새 예약·취소를 받는다. 직원 기기는 자기 매장만 받는다.
 - ✅ 푸시 제목 앞에 `[매장명]`을 붙이고, `data`에 `storeId`를 넣는다.
+
+### F-027 테스트 매장 (`stores.is_test`)
+**유저 스토리**: 운영팀으로서 실서버에 테스트·앱 심사용 매장을 두고 예약·푸시를 실제처럼 시험하되, 손님에게는 이 매장이 보이지 않게 한다.
+
+- ✅ `stores.is_test`(기본 0)가 1인 매장은 고객 매장 목록·검색(`GET /api/customer/stores`)에 나오지 않는다.
+- ✅ 테스트 매장도 id·slug로 상세 조회와 예약 생성이 된다(링크를 아는 사람만 접근). 점주 앱 로그인·푸시 등 점주 기능은 일반 매장과 같다.
+- ✅ 테스트 매장 지정·해제는 운영 SQL로 한다(`UPDATE stores SET is_test = 1 WHERE id = ?`). 관리자 화면은 아직 없다.
 
 ---
 

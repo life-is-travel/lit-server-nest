@@ -148,6 +148,7 @@ describe('CustomerStoresService', () => {
       expect.objectContaining({
         where: {
           closed_at: null,
+          is_test: false,
           OR: [
             { business_name: { contains: '루라운지' } },
             { address: { contains: '루라운지' } },
@@ -213,7 +214,7 @@ describe('CustomerStoresService', () => {
     expect(result.reservationCount).toBe(12);
   });
 
-  it('excludes withdrawn stores from the list even without a keyword', async () => {
+  it('excludes withdrawn and test stores from the list even without a keyword', async () => {
     const { service, prisma } = createService();
 
     prisma.stores.findMany.mockResolvedValue([]);
@@ -221,8 +222,30 @@ describe('CustomerStoresService', () => {
     await service.listStores({});
 
     expect(prisma.stores.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { closed_at: null } }),
+      expect.objectContaining({ where: { closed_at: null, is_test: false } }),
     );
+  });
+
+  it('still opens a test store detail by its id (심사·내부 테스트용 직접 접근)', async () => {
+    const { service, prisma } = createService();
+
+    prisma.stores.findFirst.mockResolvedValue({
+      ...createCustomerStoreRecord(),
+      is_test: true,
+    });
+
+    const result = await service.getStoreDetail('store_1');
+
+    // where를 통째로 비교해서 is_test 조건이 붙지 않았음을 확인한다
+    expect(prisma.stores.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          closed_at: null,
+          OR: [{ id: 'store_1' }, { slug: 'store_1' }],
+        },
+      }),
+    );
+    expect(result.id).toBe('store_1');
   });
 
   it('throws NOT_FOUND when store detail does not exist', async () => {

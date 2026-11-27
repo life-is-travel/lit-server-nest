@@ -68,13 +68,15 @@ export class CustomerStoresService {
   private createListWhere(
     keyword: string | undefined,
   ): Prisma.storesWhereInput {
-    // 탈퇴한 매장(closed_at)은 고객에게 노출하지 않는다.
+    // 탈퇴한 매장(closed_at)과 테스트 매장(is_test)은 고객 목록·검색에 노출하지 않는다.
+    // 테스트 매장은 상세·예약을 id로 직접 열 수 있어야 해서(심사·내부 테스트) 목록에서만 뺀다.
     if (!keyword) {
-      return { closed_at: null };
+      return { closed_at: null, is_test: false };
     }
 
     return {
       closed_at: null,
+      is_test: false,
       OR: [
         { business_name: { contains: keyword } },
         { address: { contains: keyword } },
