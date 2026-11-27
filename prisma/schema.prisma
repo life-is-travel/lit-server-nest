@@ -772,6 +772,8 @@ model stores {
   login_count               Int                        @default(0)
   login_locked_until        DateTime?                  @db.DateTime(0)
   closed_at                 DateTime?                  @db.DateTime(0)
+  /// 내부 테스트·앱 심사용 매장. 고객 매장 목록·검색에 나오지 않는다(id로 직접 조회·예약은 가능)
+  is_test                   Boolean                    @default(false)
   daily_statistics          daily_statistics[]
   notifications             notifications[]
   payments                  payments[]
